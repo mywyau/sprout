@@ -2,7 +2,7 @@ package sprout.cli
 
 import cats.effect.{ExitCode, IO, IOApp}
 import sprout.core.{CompilationResult, SproutError}
-import sprout.bsp.{BspConnection, BspServer}
+import sprout.bsp.{BspConnection, BspConnectionChange, BspServer}
 import java.nio.file.Path
 
 object Main extends IOApp:
@@ -54,9 +54,13 @@ object Main extends IOApp:
         for
           config <- sprout.config.ProjectConfig.locate(Path.of("."))
           root = config.toAbsolutePath.normalize.getParent
-          installed <- BspConnection.install(root, Version, BspConnection.currentLauncher)
+          result <- BspConnection.install(root, Version, BspConnection.currentLauncher)
+          action = result.change match
+            case BspConnectionChange.Created   => "Installed"
+            case BspConnectionChange.Updated   => "Updated stale"
+            case BspConnectionChange.Unchanged => "Already configured"
           _ <- IO.println(
-            s"✓ Installed ${root.relativize(installed)}\n\nIn VS Code, run: Metals: Restart build server"
+            s"✓ $action ${root.relativize(result.path)}\n\nIn VS Code, run: Metals: Restart build server"
           )
         yield ()
       case CliCommand.Bsp => BspServer.run(Path.of("."), Version)

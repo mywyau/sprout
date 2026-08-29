@@ -37,7 +37,9 @@ jobs:
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
       - name: Check shell syntax
-        run: sh -n bin/sprout install.sh scripts/*.sh
+        run: |
+          sh -n bin/sprout install.sh scripts/*.sh
+          ruby -c scripts/test-bsp.rb
 
       - name: Test and assemble release
         env:
@@ -52,6 +54,8 @@ jobs:
           sha=$(awk -v archive="sprout-$VERSION.tar.gz" '$2 == archive { print $1 }' "target/release/sprout-$VERSION-checksums.txt")
           scripts/render-homebrew-formula.sh "$VERSION" "$sha" target/release/sprout.rb
           ruby -c target/release/sprout.rb
+          grep -F -- '-Dsprout.launcher=#{bin}/sprout' target/release/sprout.rb
+          grep -F -- 'system bin/"sprout", "setup-ide"' target/release/sprout.rb
 
       - name: Test packaged installation
         env:

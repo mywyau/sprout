@@ -94,8 +94,9 @@ sprout setup-ide
 This writes `.bsp/sprout.json`, which tells Metals how to start Sprout's build server. In VS Code,
 run **Metals: Restart build server** from the command palette (or reload the window). Metals then
 uses the Scala version, source roots, compiler options, and resolved dependency classpath from
-`sprout.toml`; no `build.sbt` is needed. Re-run `sprout setup-ide` after moving or reinstalling the
-Sprout executable because the connection file records its absolute launcher path.
+`sprout.toml`; no `build.sbt` is needed. Running `sprout setup-ide` again is safe: Sprout leaves a
+current connection unchanged and atomically repairs one that is malformed or points to a different
+Sprout version or launcher. Re-run it after moving, upgrading, or reinstalling Sprout.
 
 ## Try Sprout locally
 
@@ -190,8 +191,9 @@ sbt check
 
 Real integration fixtures cover a basic app, Coursier dependency resolution, a compiler error, and an
 MUnit project. CI additionally installs a packaged archive into a temporary location and exercises
-`new`, `run`, `test`, and `clean`. `benchmarks/measure.sh` provides coarse startup/cold/no-change
-measurements intended for tracking trends, not claims.
+`new`, BSP setup and compilation, SemanticDB generation, `run`, `test`, and `clean`.
+`benchmarks/measure.sh` provides coarse startup/cold/no-change measurements intended for tracking
+trends, not claims.
 
 ## Maintainer release process
 
@@ -216,7 +218,8 @@ The `Release` workflow then:
 
 1. Tests and assembles Sprout with the tag-derived version.
 2. Creates archives, checksums, the installer, and a Homebrew formula.
-3. Installs the packaged archive and exercises `new`, `run`, `test`, and `clean`.
+3. Installs the packaged archive and exercises BSP setup/import/compilation, `new`, `run`, `test`, and
+   `clean`.
 4. Publishes or refreshes the GitHub release assets.
 5. Commits the formula to `mywyau/homebrew-tap` when it changed.
 

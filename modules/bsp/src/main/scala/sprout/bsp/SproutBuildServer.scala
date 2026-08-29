@@ -5,11 +5,14 @@ import cats.effect.unsafe.implicits.global
 import cats.syntax.all.*
 import ch.epfl.scala.bsp4j.*
 import java.nio.file.Path
-import java.util.concurrent.CompletableFuture
+import java.util.concurrent.{CompletableFuture, TimeUnit}
 import scala.jdk.CollectionConverters.*
 
-private[bsp] final class SproutBuildServer(root: Path, version: String)
-    extends BuildServer,
+private[bsp] final class SproutBuildServer(
+    root: Path,
+    version: String,
+    exit: () => Unit = () => ()
+) extends BuildServer,
       ScalaBuildServer:
   private val projectRoot = root.toAbsolutePath.normalize
   private val workspace = BspWorkspace(projectRoot)
@@ -37,8 +40,10 @@ private[bsp] final class SproutBuildServer(root: Path, version: String)
 
   override def onBuildInitialized(): Unit = ()
   override def buildShutdown(): CompletableFuture[Object] =
-    CompletableFuture.completedFuture(null)
-  override def onBuildExit(): Unit = ()
+    val result = CompletableFuture.completedFuture[Object](null)
+    CompletableFuture.delayedExecutor(250, TimeUnit.MILLISECONDS).execute(() => exit())
+    result
+  override def onBuildExit(): Unit = exit()
   override def workspaceReload(): CompletableFuture[Object] =
     CompletableFuture.completedFuture(null)
 

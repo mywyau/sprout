@@ -22,7 +22,8 @@ SPROUT_INSTALL_ROOT="$TEMPORARY_ROOT/installed" \
 SPROUT_BIN_DIR="$TEMPORARY_ROOT/bin" \
   "$REPOSITORY_ROOT/install.sh" --version "$VERSION" >/dev/null
 
-INSTALLED_SPROUT="$TEMPORARY_ROOT/bin/sprout"
+INSTALLED_BIN=$(CDPATH= cd -- "$TEMPORARY_ROOT/bin" && pwd)
+INSTALLED_SPROUT="$INSTALLED_BIN/sprout"
 "$INSTALLED_SPROUT" --help >/dev/null
 
 mkdir -p "$TEMPORARY_ROOT/projects"
@@ -30,6 +31,9 @@ mkdir -p "$TEMPORARY_ROOT/projects"
   cd "$TEMPORARY_ROOT/projects"
   "$INSTALLED_SPROUT" new hello >/dev/null
   cd hello
+  "$INSTALLED_SPROUT" setup-ide >/dev/null
+  grep -F "\"$INSTALLED_SPROUT\"" .bsp/sprout.json >/dev/null
+  ruby "$REPOSITORY_ROOT/scripts/test-bsp.rb" "$INSTALLED_SPROUT" "$PWD" >/dev/null
   "$INSTALLED_SPROUT" run | grep -F "Hello from Sprout!" >/dev/null
   "$INSTALLED_SPROUT" test | grep -F "1 test(s) passed" >/dev/null
   "$INSTALLED_SPROUT" clean >/dev/null

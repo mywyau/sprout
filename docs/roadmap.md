@@ -10,9 +10,19 @@ working ordinary Scala build before expanding the surface area.
 - `new`, `compile`, `run`, `test`, and `clean`
 - Maven Central dependencies through Coursier
 - MUnit test execution
-- Initial BSP and Metals project import
 
 ## v0.2
+
+- Initial BSP and Metals project import
+
+## v0.2.1
+
+- Stable Homebrew launcher paths for BSP
+- Stale BSP connection detection and atomic repair
+- Installed-distribution BSP and SemanticDB release tests
+- Positioned compiler diagnostics through BSP
+
+## Next
 
 - Stronger local metadata caching
 - Dependency `add` and `remove`

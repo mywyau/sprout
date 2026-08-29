@@ -29,8 +29,11 @@ git push origin v0.1.0
 
 The workflow validates the tag, injects its version into the jar manifest, runs all tests, packages
 the archives, performs a clean installation smoke test, generates a Homebrew formula, and only then
-creates the GitHub release. After the release assets exist, it commits the generated formula to the
-Homebrew tap. Release publication is idempotent so a failed tap update can be retried safely.
+creates the GitHub release. The smoke test creates a project, verifies that `setup-ide` records the
+installed launcher, completes a real BSP JSON-RPC import and compilation, checks SemanticDB output,
+and runs the generated application and tests. After the release assets exist, the workflow commits
+the generated formula to the Homebrew tap. Release publication is idempotent so a failed tap update
+can be retried safely.
 
 Do not recreate a published tag. Fix the issue and publish a new version.
 
@@ -44,6 +47,10 @@ This makes the new version available through:
 brew update
 brew upgrade sprout
 ```
+
+The formula passes its stable `bin/sprout` path to the application. This is important because BSP
+clients start the command recorded in `.bsp/sprout.json`, and Homebrew replaces versioned Cellar paths
+during upgrades. The formula test verifies this path before publication.
 
 Cross-repository access uses the `HOMEBREW_TAP_TOKEN` Actions secret in `mywyau/sprout`. The token must
 be fine-grained to `mywyau/homebrew-tap` with only `Contents: read and write` and `Metadata: read`.

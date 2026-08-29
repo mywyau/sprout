@@ -12,11 +12,18 @@ class Sprout < Formula
     java = Formula["openjdk@21"].opt_bin/"java"
     (bin/"sprout").write <<~SH
       #!/bin/sh
-      exec "#{java}" -jar "#{libexec}/lib/sprout.jar" "$@"
+      exec "#{java}" "-Dsprout.launcher=#{bin}/sprout" -jar "#{libexec}/lib/sprout.jar" "$@"
     SH
   end
 
   test do
     assert_match "Sprout @VERSION@", shell_output("#{bin}/sprout --version")
+    (testpath/"sprout.toml").write <<~TOML
+      [project]
+      name = "formula-test"
+      scala = "3.3.6"
+    TOML
+    system bin/"sprout", "setup-ide"
+    assert_match (bin/"sprout").to_s, (testpath/".bsp/sprout.json").read
   end
 end
