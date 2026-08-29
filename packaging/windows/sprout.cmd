@@ -22,5 +22,5 @@ if not exist "%JAR_PATH%" (
   exit /b 1
 )
 
-"%JAVA_COMMAND%" -jar "%JAR_PATH%" %*
+"%JAVA_COMMAND%" "-Dsprout.launcher=%~f0" -jar "%JAR_PATH%" %*
 exit /b %ERRORLEVEL%

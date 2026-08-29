@@ -15,3 +15,8 @@ class CliSuite extends munit.FunSuite:
   test("rejects unknown commands") {
     assert(Cli.parse(List("publish")).isLeft)
   }
+
+  test("parses IDE setup and the internal BSP command") {
+    assertEquals(Cli.parse(List("setup-ide")), Right(CliInvocation(CliCommand.SetupIde, false)))
+    assertEquals(Cli.parse(List("bsp")), Right(CliInvocation(CliCommand.Bsp, false)))
+  }

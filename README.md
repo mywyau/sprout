@@ -15,8 +15,13 @@ plugins, custom tasks, multi-module builds, cross-building, publishing, and remo
 
 ## Install
 
-Sprout requires JDK 17 or newer, but users do not need Scala, Coursier, or sbt. After the first GitHub
-release is published, install the latest version with:
+Sprout requires JDK 17 or newer, but users do not need Scala, Coursier, or sbt. Install with Homebrew:
+
+```bash
+brew install mywyau/tap/sprout
+```
+
+Alternatively, use the checksum-verifying installer:
 
 ```bash
 curl -fsSL https://github.com/mywyau/sprout/releases/latest/download/install.sh | sh
@@ -36,11 +41,11 @@ Install a specific version or custom destination with:
 Windows users can download the release ZIP and add its `bin` directory to `PATH`; `sprout.cmd` uses
 `JAVA_HOME`, `SPROUT_JAVA_HOME`, or `java` from `PATH`.
 
-Each release also includes a generated `sprout.rb` formula. Until a dedicated Homebrew tap repository
-is created, it can be installed directly after downloading it:
+Upgrade a Homebrew installation after a new release with:
 
 ```bash
-brew install ./sprout.rb
+brew update
+brew upgrade sprout
 ```
 
 To uninstall the script-based installation, remove `~/.local/bin/sprout` and
@@ -77,6 +82,62 @@ sprout clean
 
 `new` creates a conventional application and one MUnit test. Generated state stays under `.sprout/`;
 `clean` removes only that directory and leaves Coursier's global artifact cache intact.
+
+### VS Code and Metals
+
+Install the Metals extension, then configure the current Sprout project once:
+
+```bash
+sprout setup-ide
+```
+
+This writes `.bsp/sprout.json`, which tells Metals how to start Sprout's build server. In VS Code,
+run **Metals: Restart build server** from the command palette (or reload the window). Metals then
+uses the Scala version, source roots, compiler options, and resolved dependency classpath from
+`sprout.toml`; no `build.sbt` is needed. Re-run `sprout setup-ide` after moving or reinstalling the
+Sprout executable because the connection file records its absolute launcher path.
+
+## Try Sprout locally
+
+Create a disposable project outside the Sprout repository and exercise the installed command exactly
+as a user would:
+
+```bash
+workdir="$(mktemp -d)"
+cd "$workdir"
+
+sprout --version
+sprout new hello
+cd hello
+
+sprout compile  # cold compilation
+sprout compile  # should report nothing to build
+sprout run
+sprout test
+sprout clean
+test ! -e .sprout
+```
+
+Next, test real dependency resolution. Add this to `sprout.toml`:
+
+```toml
+[dependencies]
+cats-effect = "org.typelevel::cats-effect:3.6.3"
+```
+
+Replace `src/main/scala/Main.scala` with:
+
+```scala
+import cats.effect.{IO, IOApp}
+
+object Main extends IOApp.Simple:
+  def run: IO[Unit] = IO.println("Cats Effect resolved by Sprout")
+```
+
+Run `sprout run` twice. The first run should resolve and compile; the second should reuse downloaded
+artifacts and unchanged classes. Also introduce a deliberate type error and confirm that Sprout keeps
+the compiler's file and line information without printing an internal stack trace. Use `--debug` to
+verify that deeper diagnostics remain available when requested.
 
 ## Configuration
 
@@ -115,6 +176,7 @@ src/test/scala       src/test/resources
 | `sprout run [ARGS]` | Compile, detect one main class, and run it |
 | `sprout test` | Compile and run MUnit suites |
 | `sprout clean` | Delete project-local `.sprout/` state |
+| `sprout setup-ide` | Install the BSP connection used by Metals-compatible editors |
 
 Pass `--debug` with a command to include stack traces for unexpected failures. Normal configuration,
 resolution, and compilation failures remain compact and actionable.
@@ -131,6 +193,55 @@ MUnit project. CI additionally installs a packaged archive into a temporary loca
 `new`, `run`, `test`, and `clean`. `benchmarks/measure.sh` provides coarse startup/cold/no-change
 measurements intended for tracking trends, not claims.
 
+## Maintainer release process
+
+Normal releases are driven by semantic version tags. The version is injected into the assembled jar
+from the tag, so `build.sbt` does not need a manual release-version edit.
+
+Before tagging, test the intended commit and push it to `main`:
+
+```bash
+sbt check
+git push origin main
+```
+
+Wait for the `CI` workflow to pass, then create a new tag. Never reuse or move a published tag:
+
+```bash
+git tag v0.1.2
+git push origin v0.1.2
+```
+
+The `Release` workflow then:
+
+1. Tests and assembles Sprout with the tag-derived version.
+2. Creates archives, checksums, the installer, and a Homebrew formula.
+3. Installs the packaged archive and exercises `new`, `run`, `test`, and `clean`.
+4. Publishes or refreshes the GitHub release assets.
+5. Commits the formula to `mywyau/homebrew-tap` when it changed.
+
+Watch and verify the release with:
+
+```bash
+gh run watch --repo mywyau/sprout
+brew update
+brew upgrade sprout
+sprout --version
+brew info mywyau/tap/sprout
+```
+
+Homebrew publication requires the `HOMEBREW_TAP_TOKEN` Actions secret. It must be a fine-grained token
+limited to `mywyau/homebrew-tap` with `Contents: read and write` and `Metadata: read`. Rotate it before
+expiry and update the secret without committing its value:
+
+```bash
+gh secret set HOMEBREW_TAP_TOKEN --repo mywyau/sprout
+```
+
+The release workflow is safe to rerun after a partial failure: existing assets are replaced and an
+unchanged Homebrew formula does not produce an empty commit. See the full
+[release guide](docs/releasing.md) for details.
+
 See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md),
 [performance](docs/performance.md), and [release process](docs/releasing.md) for design details and
 current direction.
@@ -139,5 +250,6 @@ current direction.
 
 Compilation caching currently skips an unchanged compilation by hashing source contents, Scala
 version, compiler options, and classpath artifact identities. It is not incremental within a changed
-compilation; Zinc is the planned backend for that. There is no lockfile, BSP server, daemon, package
-command, publishing, or multi-module support yet.
+compilation; Zinc is the planned backend for that. BSP currently covers editor import, dependency
+sources, and compilation but not editor run, test, or debug requests. There is no lockfile, daemon,
+package command, publishing, or multi-module support yet.

@@ -8,6 +8,8 @@ enum CliCommand:
   case Run(arguments: List[String])
   case Test
   case Clean
+  case SetupIde
+  case Bsp
 
 final case class CliInvocation(command: CliCommand, debug: Boolean)
 
@@ -23,4 +25,6 @@ object Cli:
       case "run" :: tail                       => Right(CliInvocation(CliCommand.Run(tail), debug))
       case "test" :: Nil                       => Right(CliInvocation(CliCommand.Test, debug))
       case "clean" :: Nil                      => Right(CliInvocation(CliCommand.Clean, debug))
+      case "setup-ide" :: Nil                  => Right(CliInvocation(CliCommand.SetupIde, debug))
+      case "bsp" :: Nil                        => Right(CliInvocation(CliCommand.Bsp, debug))
       case command :: _ => Left(s"Unknown command '$command'. Run sprout --help.")

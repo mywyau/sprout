@@ -18,12 +18,23 @@ final class CoursierDependencyResolver extends DependencyResolver[IO]:
       .fold(message => throw IllegalArgumentException(message), identity)
     fetch(scalaVersion, List(compiler))
 
-  private def fetch(
+  def resolveSources(
       scalaVersion: ScalaVersion,
       dependencies: List[Dependency]
   ): IO[ResolvedClasspath] =
+    val scalaLibrary = Dependency
+      .parse(s"org.scala-lang:scala3-library_3:${scalaVersion.value}", DependencyScope.Main)
+      .fold(message => throw IllegalArgumentException(message), identity)
+    fetch(scalaVersion, scalaLibrary :: dependencies, sources = true)
+
+  private def fetch(
+      scalaVersion: ScalaVersion,
+      dependencies: List[Dependency],
+      sources: Boolean = false
+  ): IO[ResolvedClasspath] =
     IO.blocking {
       val fetch = Fetch.create()
+      if sources then fetch.withMainArtifacts(false).addClassifiers("sources")
       dependencies.foreach { dependency =>
         fetch.addDependencies(
           CoursierDependency.of(

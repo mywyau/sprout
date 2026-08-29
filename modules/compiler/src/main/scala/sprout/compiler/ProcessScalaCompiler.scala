@@ -2,9 +2,10 @@ package sprout.compiler
 
 import cats.effect.IO
 import sprout.core.*
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 
-final class ProcessScalaCompiler extends ScalaCompiler[IO]:
+final class ProcessScalaCompiler(captureOutput: Boolean = false) extends ScalaCompiler[IO]:
   def compile(request: CompilationRequest): IO[CompilationResult] =
     if request.sources.isEmpty then IO.pure(CompilationResult.UpToDate)
     else
@@ -22,8 +23,18 @@ final class ProcessScalaCompiler extends ScalaCompiler[IO]:
           "-d",
           request.outputDirectory.toString
         ) ++ request.compilerOptions ++ request.sources.map(_.toString)
-        val exit = new ProcessBuilder(command*).inheritIO().start().waitFor()
-        if exit != 0 then throw SproutError.Compilation(exit)
+        val builder = new ProcessBuilder(command*)
+        val process =
+          if captureOutput then builder.redirectErrorStream(true).start()
+          else builder.inheritIO().start()
+        val output =
+          if captureOutput then
+            String(process.getInputStream.readAllBytes(), StandardCharsets.UTF_8)
+          else ""
+        val exit = process.waitFor()
+        if output.nonEmpty then System.err.print(output)
+        if exit != 0 then
+          throw SproutError.Compilation(exit, Option.when(captureOutput)(output).filter(_.nonEmpty))
         CompilationResult.Compiled(request.sources.size)
       }
 

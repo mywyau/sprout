@@ -5,10 +5,10 @@ declarative project description into explicit requests to dependency resolution,
 execution boundaries. It is not a general task engine.
 
 ```text
-cli ──> config ──> core <── dependencies
- │                  ▲       (Coursier)
- └──────────────────┼────── compiler
-                    └────── runner
+cli ─────> config ──> core <── dependencies
+ │          ▲         ▲       (Coursier)
+ ├────────> bsp ──────┼────── compiler
+ └────────────────────┼────── runner
 ```
 
 ## Modules
@@ -21,6 +21,8 @@ cli ──> config ──> core <── dependencies
 - `compiler` owns compilation requests and the compiler boundary. The first backend starts Dotty in
   an isolated JVM; callers do not depend on that choice.
 - `runner` starts JVM applications and provides a test-framework boundary. MUnit is the first adapter.
+- `bsp` translates the standard Build Server Protocol into project, resolution, and compilation
+  operations. It owns no editor-specific build logic.
 - `cli` contains command parsing, compact presentation, project generation, and build orchestration.
 
 Dependencies point inward toward `core`; infrastructure modules do not depend on the CLI. A future
@@ -41,9 +43,9 @@ an analysis store below `.sprout/metadata`, use Zinc analysis to select affected
 and atomically update analysis. The CLI and project model do not assume whole-project compilation.
 Sprout will use Zinc rather than reproduce its dependency analysis.
 
-## Future daemon and BSP
+## BSP and a future daemon
 
 A daemon can sit in front of the same application service and retain resolver/compiler resources in a
-warm JVM. Local IPC is a transport concern: normal one-shot CLI execution remains supported. A BSP
-adapter likewise translates protocol requests into build plans and compilation requests rather than
-embedding build logic in the protocol layer.
+warm JVM. Local IPC is a transport concern: normal one-shot CLI execution remains supported. The BSP
+adapter already translates editor import and compile requests into the same project, Coursier, and
+compiler boundaries. It can later delegate to a daemon without changing the BSP contract.

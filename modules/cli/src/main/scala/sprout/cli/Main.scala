@@ -2,6 +2,7 @@ package sprout.cli
 
 import cats.effect.{ExitCode, IO, IOApp}
 import sprout.core.{CompilationResult, SproutError}
+import sprout.bsp.{BspConnection, BspServer}
 import java.nio.file.Path
 
 object Main extends IOApp:
@@ -49,6 +50,16 @@ object Main extends IOApp:
           .flatMap(result => IO.println(s"\n✓ ${result.total} test(s) passed"))
       case CliCommand.Clean =>
         service.clean(Path.of(".")).flatMap(_ => IO.println("✓ Cleaned .sprout"))
+      case CliCommand.SetupIde =>
+        for
+          config <- sprout.config.ProjectConfig.locate(Path.of("."))
+          root = config.toAbsolutePath.normalize.getParent
+          installed <- BspConnection.install(root, Version, BspConnection.currentLauncher)
+          _ <- IO.println(
+            s"✓ Installed ${root.relativize(installed)}\n\nIn VS Code, run: Metals: Restart build server"
+          )
+        yield ()
+      case CliCommand.Bsp => BspServer.run(Path.of("."), Version)
 
   private val help =
     s"""Sprout $Version
@@ -63,6 +74,7 @@ object Main extends IOApp:
        |  run [ARGS] Compile and run the application
        |  test       Compile and run MUnit tests
        |  clean      Delete project-local build state
+       |  setup-ide  Configure Metals and other BSP-compatible editors
        |
        |Options:
        |  -h, --help     Show this help

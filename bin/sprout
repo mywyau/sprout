@@ -1,6 +1,12 @@
 #!/usr/bin/env sh
 set -eu
 
+case $0 in
+  /*) INVOKED_LAUNCHER=$0 ;;
+  */*) INVOKED_LAUNCHER=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/$(basename -- "$0") ;;
+  *) INVOKED_LAUNCHER=$(command -v "$0") ;;
+esac
+
 LAUNCHER_PATH=$0
 while [ -h "$LAUNCHER_PATH" ]; do
   LINK_TARGET=$(readlink "$LAUNCHER_PATH")
@@ -38,4 +44,4 @@ if [ ! -f "$JAR_PATH" ]; then
   exit 1
 fi
 
-exec "$JAVA_COMMAND" -jar "$JAR_PATH" "$@"
+exec "$JAVA_COMMAND" "-Dsprout.launcher=$INVOKED_LAUNCHER" -jar "$JAR_PATH" "$@"

@@ -10,6 +10,7 @@ working ordinary Scala build before expanding the surface area.
 - `new`, `compile`, `run`, `test`, and `clean`
 - Maven Central dependencies through Coursier
 - MUnit test execution
+- Initial BSP and Metals project import
 
 ## v0.2
 
@@ -19,7 +20,7 @@ working ordinary Scala build before expanding the surface area.
 
 ## v0.3
 
-- BSP and Metals integration
+- Richer BSP run, test, and debug integration
 - Multi-module builds represented as a DAG
 
 ## v0.4

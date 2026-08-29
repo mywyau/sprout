@@ -51,6 +51,7 @@ jobs:
           scripts/package-release.sh "$VERSION"
           sha=$(awk -v archive="sprout-$VERSION.tar.gz" '$2 == archive { print $1 }' "target/release/sprout-$VERSION-checksums.txt")
           scripts/render-homebrew-formula.sh "$VERSION" "$sha" target/release/sprout.rb
+          ruby -c target/release/sprout.rb
 
       - name: Test packaged installation
         env:
@@ -62,12 +63,42 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            "target/release/sprout-$VERSION.tar.gz" \
-            "target/release/sprout-$VERSION.zip" \
-            "target/release/sprout-$VERSION-checksums.txt" \
-            "target/release/sprout.rb" \
-            "install.sh" \
-            --verify-tag \
-            --generate-notes \
-            --title "Sprout $VERSION"
+          assets=(
+            "target/release/sprout-$VERSION.tar.gz"
+            "target/release/sprout-$VERSION.zip"
+            "target/release/sprout-$VERSION-checksums.txt"
+            "target/release/sprout.rb"
+            "install.sh"
+          )
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
+              --verify-tag \
+              --generate-notes \
+              --title "Sprout $VERSION"
+          fi
+
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: mywyau/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Publish Homebrew formula
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          mkdir -p homebrew-tap/Formula
+          cp target/release/sprout.rb homebrew-tap/Formula/sprout.rb
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/sprout.rb
+          if git diff --cached --quiet; then
+            echo "Homebrew formula already points to Sprout $VERSION"
+          else
+            git commit -m "Update Sprout to $VERSION"
+            git push origin HEAD:main
+          fi
