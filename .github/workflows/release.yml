@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Read release version
+        id: version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check shell syntax
+        run: sh -n bin/sprout install.sh scripts/*.sh
+
+      - name: Test and assemble release
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: sbt "set ThisBuild / version := \"$VERSION\"" check cli/assembly
+
+      - name: Build release assets
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          scripts/package-release.sh "$VERSION"
+          sha=$(awk -v archive="sprout-$VERSION.tar.gz" '$2 == archive { print $1 }' "target/release/sprout-$VERSION-checksums.txt")
+          scripts/render-homebrew-formula.sh "$VERSION" "$sha" target/release/sprout.rb
+
+      - name: Test packaged installation
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: scripts/test-distribution.sh "$VERSION" target/release
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "target/release/sprout-$VERSION.tar.gz" \
+            "target/release/sprout-$VERSION.zip" \
+            "target/release/sprout-$VERSION-checksums.txt" \
+            "target/release/sprout.rb" \
+            "install.sh" \
+            --verify-tag \
+            --generate-notes \
+            --title "Sprout $VERSION"

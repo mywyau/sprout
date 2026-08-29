@@ -1,0 +1,3 @@
+[project]
+name = "compile-error"
+scala = "3.3.6"

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Check shell syntax
+        run: sh -n bin/sprout install.sh scripts/*.sh
+
+      - name: Test and assemble
+        run: sbt check cli/assembly
+
+      - name: Package distribution
+        run: scripts/package-release.sh 0.1.0-SNAPSHOT
+
+      - name: Test packaged installation
+        run: scripts/test-distribution.sh 0.1.0-SNAPSHOT target/release

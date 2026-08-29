@@ -1,0 +1,6 @@
+[project]
+name = "munit-project"
+scala = "3.3.6"
+
+[test-dependencies]
+munit = "org.scalameta::munit:1.1.1"

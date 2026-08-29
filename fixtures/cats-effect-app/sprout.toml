@@ -1,0 +1,6 @@
+[project]
+name = "cats-effect-app"
+scala = "3.3.6"
+
+[dependencies]
+cats-effect = "org.typelevel::cats-effect:3.6.3"

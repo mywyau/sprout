@@ -1,0 +1,41 @@
+#!/usr/bin/env sh
+set -eu
+
+LAUNCHER_PATH=$0
+while [ -h "$LAUNCHER_PATH" ]; do
+  LINK_TARGET=$(readlink "$LAUNCHER_PATH")
+  case "$LINK_TARGET" in
+    /*) LAUNCHER_PATH=$LINK_TARGET ;;
+    *) LAUNCHER_PATH=$(dirname -- "$LAUNCHER_PATH")/$LINK_TARGET ;;
+  esac
+done
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$LAUNCHER_PATH")" && pwd)
+
+if [ -n "${SPROUT_JAVA_HOME:-}" ]; then
+  JAVA_COMMAND="$SPROUT_JAVA_HOME/bin/java"
+elif [ -n "${JAVA_HOME:-}" ]; then
+  JAVA_COMMAND="$JAVA_HOME/bin/java"
+elif command -v java >/dev/null 2>&1; then
+  JAVA_COMMAND=java
+else
+  printf '%s\n' "error: Sprout requires Java 17 or newer." >&2
+  printf '%s\n' "Install a JDK or set SPROUT_JAVA_HOME." >&2
+  exit 1
+fi
+
+if [ -n "${SPROUT_JAR:-}" ]; then
+  JAR_PATH=$SPROUT_JAR
+elif [ -f "$SCRIPT_DIR/../lib/sprout.jar" ]; then
+  JAR_PATH="$SCRIPT_DIR/../lib/sprout.jar"
+else
+  JAR_PATH="$SCRIPT_DIR/../target/sprout.jar"
+fi
+
+if [ ! -f "$JAR_PATH" ]; then
+  printf '%s\n' "error: Sprout's application jar was not found at:" >&2
+  printf '  %s\n' "$JAR_PATH" >&2
+  printf '%s\n' "Build it with 'sbt cli/assembly' or reinstall Sprout." >&2
+  exit 1
+fi
+
+exec "$JAVA_COMMAND" -jar "$JAR_PATH" "$@"
