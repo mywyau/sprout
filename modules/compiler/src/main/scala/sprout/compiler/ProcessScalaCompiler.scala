@@ -52,20 +52,16 @@ final class CachingScalaCompiler(delegate: ScalaCompiler[IO], cache: Cache[IO])
     for
       key <- Hashing.compilationKey(request)
       cached <- cache.get(key)
-      reusable <- outputExists(request.outputDirectory)
+      output <- Hashing.outputFingerprint(request.outputDirectory)
       result <-
-        if cached.nonEmpty && reusable then IO.pure(CompilationResult.UpToDate)
+        if cached.exists(value => output.contains(value.value)) then
+          IO.pure(CompilationResult.UpToDate)
         else
           delegate.compile(request).flatTap {
-            case CompilationResult.Compiled(_) => cache.put(key, CachedValue("compiled"))
-            case CompilationResult.UpToDate    => IO.unit
+            case CompilationResult.Compiled(_) =>
+              Hashing
+                .outputFingerprint(request.outputDirectory)
+                .flatMap(_.fold(IO.unit)(value => cache.put(key, CachedValue(value))))
+            case CompilationResult.UpToDate => IO.unit
           }
     yield result
-
-  private def outputExists(directory: Path): IO[Boolean] = IO.blocking {
-    if !Files.isDirectory(directory) then false
-    else
-      val stream = Files.walk(directory)
-      try stream.anyMatch(path => Files.isRegularFile(path) && path.toString.endsWith(".class"))
-      finally stream.close()
-  }

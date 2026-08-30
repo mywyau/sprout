@@ -252,8 +252,8 @@ MUnit project. CI additionally installs a packaged Sprout archive into a tempora
 exercises `new`, dependency editing and diagnostics, BSP setup and compilation, SemanticDB
 generation, `run`, `test`, application packaging, packaged execution, checksum verification, and
 `clean`.
-`benchmarks/measure.sh` provides coarse startup/cold/no-change measurements intended for tracking
-trends, not claims.
+`benchmarks/measure.sh` provides coarse startup, cold, warm, no-change, and single-file-change
+measurements intended for tracking trends, not claims.
 
 ## Maintainer release process
 
@@ -311,9 +311,10 @@ See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md),
 
 ## Current limitations
 
-Compilation caching currently skips an unchanged compilation by hashing source contents, Scala
-version, compiler options, and classpath artifact identities. It is not incremental within a changed
-compilation; Zinc is the planned backend for that. Dependency diagnostics currently cover the main
-scope; test-scope graph queries are not yet exposed. BSP currently covers editor import, dependency
-sources, and compilation but not editor run, test, or debug requests. There is no lockfile, daemon,
-library publishing, container-image creation, or multi-module support yet.
+Compilation caching currently skips an unchanged compilation using content fingerprints for sources,
+ordered dependency and compiler classpaths, Scala version, compiler options, JVM target, and compiled
+output. It is not incremental within a changed compilation; Zinc is the planned backend for that.
+Dependency diagnostics currently cover the main scope; test-scope graph queries are not yet exposed.
+BSP currently covers editor import, dependency sources, and compilation but not editor run, test, or
+debug requests. There is no lockfile, daemon, library publishing, container-image creation, or
+multi-module support yet.

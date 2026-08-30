@@ -204,13 +204,70 @@ final case class ResolvedDependencies(
     graph: ResolvedDependencyGraph
 )
 
+final case class TestBuildSession(
+    dependencies: ResolvedDependencies,
+    compileClasspath: List[Path],
+    runtimeClasspath: List[Path]
+)
+
+final case class BuildSession(
+    project: Project,
+    mainDependencies: ResolvedDependencies,
+    compilerClasspath: ResolvedClasspath,
+    mainCompileClasspath: List[Path],
+    mainRuntimeClasspath: List[Path],
+    test: Option[TestBuildSession]
+)
+
+object BuildSession:
+  def main(
+      project: Project,
+      dependencies: ResolvedDependencies,
+      compilerClasspath: ResolvedClasspath
+  ): BuildSession =
+    BuildSession(
+      project,
+      dependencies,
+      compilerClasspath,
+      dependencies.classpath.paths,
+      project.layout.mainClasses ::
+        (project.layout.mainResources ++ dependencies.classpath.paths),
+      None
+    )
+
+  def withTests(
+      project: Project,
+      mainDependencies: ResolvedDependencies,
+      testDependencies: ResolvedDependencies,
+      compilerClasspath: ResolvedClasspath
+  ): BuildSession =
+    val main = BuildSession.main(project, mainDependencies, compilerClasspath)
+    main.copy(
+      test = Some(
+        TestBuildSession(
+          testDependencies,
+          project.layout.mainClasses :: testDependencies.classpath.paths,
+          project.layout.testClasses :: project.layout.mainClasses ::
+            (project.layout.testResources ++ project.layout.mainResources ++
+              testDependencies.classpath.paths)
+        )
+      )
+    )
+
+opaque type JvmTarget = String
+object JvmTarget:
+  def apply(value: String): JvmTarget = value
+  def current: JvmTarget = JvmTarget(System.getProperty("java.specification.version"))
+  extension (target: JvmTarget) def value: String = target
+
 final case class CompilationRequest(
     sources: List[Path],
     classpath: List[Path],
     compilerClasspath: List[Path],
     outputDirectory: Path,
     scalaVersion: ScalaVersion,
-    compilerOptions: List[String] = Nil
+    compilerOptions: List[String] = Nil,
+    jvmTarget: JvmTarget = JvmTarget.current
 )
 
 enum CompilationResult:

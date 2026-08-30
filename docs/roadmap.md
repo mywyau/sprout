@@ -44,9 +44,15 @@ working ordinary Scala build before expanding the surface area.
 - Deterministic `.tar.gz` and `.zip` archives with SHA-256 checksums
 - Packaged execution and installed-distribution tests
 
+## v0.2.6
+
+- Per-command build sessions and single-pass dependency resolution
+- Content-complete compilation fingerprints and output validation
+- Versioned, atomic, corruption-tolerant cache metadata
+- Cold, warm, no-change, and single-file-change benchmark baselines
+
 ## Next
 
-- Stronger local metadata caching
 - Zinc incremental compilation
 
 ## v0.3

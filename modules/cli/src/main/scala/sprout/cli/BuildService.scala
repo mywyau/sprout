@@ -1,6 +1,7 @@
 package sprout.cli
 
 import cats.effect.IO
+import cats.syntax.all.*
 import sprout.core.*
 import sprout.config.{ProjectConfig, ProjectConfigEditor}
 import sprout.compiler.{CachingScalaCompiler, FileCache, ProcessScalaCompiler}
@@ -9,91 +10,75 @@ import sprout.packager.{ApplicationPackageRequest, ApplicationPackager, Applicat
 import sprout.runner.{JvmApplicationRunner, MainClassDiscovery, MUnitTestRunner}
 import java.nio.file.{Files, Path}
 
-final class BuildService:
-  private val resolver: DependencyResolver[IO] = CoursierDependencyResolver()
-  private val processCompiler: ScalaCompiler[IO] = ProcessScalaCompiler()
-  private val applicationRunner: ApplicationRunner[IO] = JvmApplicationRunner()
-  private val testRunner: TestRunner[IO] = MUnitTestRunner()
+final class BuildService(
+    resolver: DependencyResolver[IO] = CoursierDependencyResolver(),
+    processCompiler: ScalaCompiler[IO] = ProcessScalaCompiler(),
+    applicationRunner: ApplicationRunner[IO] = JvmApplicationRunner(),
+    testRunner: TestRunner[IO] = MUnitTestRunner()
+):
   private lazy val applicationPackager = ApplicationPackager()
 
   def compile(from: Path): IO[CompilationResult] =
-    load(from).flatMap { project =>
-      for
-        sources <- SourceDiscovery.scalaSources(project.layout.mainSources)
-        _ <- IO.raiseWhen(sources.isEmpty)(
-          SproutError.User("No Scala sources found under src/main/scala")
-        )
-        dependencies <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
-        compilerClasspath <- resolver.compilerClasspath(project.scalaVersion)
-        result <- compiler(project).compile(
-          CompilationRequest(
-            sources,
-            dependencies.classpath.paths,
-            compilerClasspath.paths,
-            project.layout.mainClasses,
-            project.scalaVersion
-          )
-        )
-      yield result
-    }
+    mainSession(from).flatMap(compileMain)
 
   def run(from: Path, arguments: List[String]): IO[Unit] =
     for
-      project <- load(from)
-      _ <- compile(from).flatMap(reportCompilation)
-      dependencies <- resolver.resolve(project.scalaVersion, project.mainDependencies)
-      classpath = project.layout.mainClasses ::
-        (project.layout.mainResources ++ dependencies.classpath.paths)
-      mainClass <- MainClassDiscovery.discover(project.layout.mainClasses, classpath)
-      exit <- applicationRunner.run(mainClass, classpath, arguments)
+      session <- mainSession(from)
+      _ <- compileMain(session).flatMap(reportCompilation)
+      mainClass <- MainClassDiscovery.discover(
+        session.project.layout.mainClasses,
+        session.mainRuntimeClasspath
+      )
+      exit <- applicationRunner.run(mainClass, session.mainRuntimeClasspath, arguments)
       _ <- IO.raiseWhen(exit != 0)(SproutError.Process("Application", exit))
     yield ()
 
   def test(from: Path): IO[TestResult] =
     for
-      project <- load(from)
-      _ <- compile(from).flatMap(reportCompilation)
-      sources <- SourceDiscovery.scalaSources(project.layout.testSources)
+      session <- sessionWithTests(from)
+      testBuild <- IO.fromOption(session.test)(
+        IllegalStateException("test build session was not initialised")
+      )
+      _ <- compileMain(session).flatMap(reportCompilation)
+      sources <- SourceDiscovery.scalaSources(session.project.layout.testSources)
       _ <- IO.raiseWhen(sources.isEmpty)(
         SproutError.User("No Scala test sources found under src/test/scala")
       )
-      dependencies <- resolving(resolver.resolve(project.scalaVersion, project.testDependencies))
-      compilerClasspath <- resolver.compilerClasspath(project.scalaVersion)
-      testClasspath = project.layout.mainClasses :: dependencies.classpath.paths
-      _ <- compiler(project)
+      _ <- compiler(session.project, "test-compile")
         .compile(
           CompilationRequest(
             sources,
-            testClasspath,
-            compilerClasspath.paths,
-            project.layout.testClasses,
-            project.scalaVersion
+            testBuild.compileClasspath,
+            session.compilerClasspath.paths,
+            session.project.layout.testClasses,
+            session.project.scalaVersion
           )
         )
         .flatMap(reportCompilation)
-      runtimeClasspath = project.layout.testClasses :: project.layout.mainClasses ::
-        (project.layout.testResources ++ project.layout.mainResources ++ dependencies.classpath.paths)
-      result <- testRunner.run(List(project.layout.testClasses), runtimeClasspath)
+      result <- testRunner.run(
+        List(session.project.layout.testClasses),
+        testBuild.runtimeClasspath
+      )
       _ <- IO.raiseWhen(result.failed > 0)(SproutError.User(s"${result.failed} test(s) failed"))
     yield result
 
   def packageApplication(from: Path): IO[ApplicationPackageResult] =
     for
-      project <- load(from)
-      _ <- compile(from).flatMap(reportCompilation)
-      dependencies <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
-      discoveryClasspath = project.layout.mainClasses ::
-        (project.layout.mainResources ++ dependencies.classpath.paths)
-      mainClass <- MainClassDiscovery.discover(project.layout.mainClasses, discoveryClasspath)
+      session <- mainSession(from)
+      _ <- compileMain(session).flatMap(reportCompilation)
+      mainClass <- MainClassDiscovery.discover(
+        session.project.layout.mainClasses,
+        session.mainRuntimeClasspath
+      )
       result <- applicationPackager.create(
         ApplicationPackageRequest(
-          project.name.value,
-          project.scalaVersion.value,
+          session.project.name.value,
+          session.project.scalaVersion.value,
           mainClass,
-          project.layout.mainClasses,
-          project.layout.mainResources,
-          dependencies.classpath.paths,
-          project.layout.packageDirectory
+          session.project.layout.mainClasses,
+          session.project.layout.mainResources,
+          session.mainDependencies.classpath.paths,
+          session.project.layout.packageDirectory
         )
       )
     yield result
@@ -142,10 +127,48 @@ final class BuildService:
       dependencies <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
     yield (project, dependencies)
 
-  private def compiler(project: Project): ScalaCompiler[IO] =
+  private def mainSession(from: Path): IO[BuildSession] =
+    load(from).flatMap { project =>
+      resolving(
+        (
+          resolver.resolve(project.scalaVersion, project.mainDependencies),
+          resolver.compilerClasspath(project.scalaVersion)
+        ).parMapN((dependencies, compiler) => BuildSession.main(project, dependencies, compiler))
+      )
+    }
+
+  private def sessionWithTests(from: Path): IO[BuildSession] =
+    load(from).flatMap { project =>
+      resolving(
+        (
+          resolver.resolve(project.scalaVersion, project.mainDependencies),
+          resolver.resolve(project.scalaVersion, project.testDependencies),
+          resolver.compilerClasspath(project.scalaVersion)
+        ).parMapN((main, test, compiler) => BuildSession.withTests(project, main, test, compiler))
+      )
+    }
+
+  private def compileMain(session: BuildSession): IO[CompilationResult] =
+    for
+      sources <- SourceDiscovery.scalaSources(session.project.layout.mainSources)
+      _ <- IO.raiseWhen(sources.isEmpty)(
+        SproutError.User("No Scala sources found under src/main/scala")
+      )
+      result <- compiler(session.project, "compile").compile(
+        CompilationRequest(
+          sources,
+          session.mainCompileClasspath,
+          session.compilerClasspath.paths,
+          session.project.layout.mainClasses,
+          session.project.scalaVersion
+        )
+      )
+    yield result
+
+  private def compiler(project: Project, cacheName: String): ScalaCompiler[IO] =
     CachingScalaCompiler(
       processCompiler,
-      FileCache(project.layout.metadataDirectory.resolve("compile"))
+      FileCache(project.layout.metadataDirectory.resolve(cacheName))
     )
 
   private def resolving[A](action: IO[A]): IO[A] =

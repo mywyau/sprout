@@ -1,8 +1,12 @@
 package sprout.cli
 
+import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import sprout.core.{CompilationResult, DependencyScope, SproutError}
+import sprout.core.*
+import sprout.dependencies.CoursierDependencyResolver
 import java.nio.file.{Files, Path, StandardCopyOption}
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters.*
 
 class BuildIntegrationSuite extends munit.FunSuite:
@@ -28,12 +32,16 @@ class BuildIntegrationSuite extends munit.FunSuite:
 
   test("runs an application through the JVM boundary") {
     val project = copyFixture("hello-world")
-    service.run(project, Nil).unsafeRunSync()
+    val resolver = CountingResolver()
+    BuildService(resolver = resolver).run(project, Nil).unsafeRunSync()
+    assertEquals(resolver.resolutions.asScala.toList, List(Nil))
+    assertEquals(resolver.compilerClasspathInvocations.get(), 1)
   }
 
   test("packages and executes an application with resolved runtime dependencies") {
     val project = copyFixture("cats-effect-app")
-    val result = service.packageApplication(project).unsafeRunSync()
+    val resolver = CountingResolver()
+    val result = BuildService(resolver = resolver).packageApplication(project).unsafeRunSync()
 
     assert(Files.isDirectory(result.applicationDirectory))
     assert(Files.isRegularFile(result.tarArchive))
@@ -48,13 +56,21 @@ class BuildIntegrationSuite extends munit.FunSuite:
     val exitCode = process.waitFor()
     assertEquals(exitCode, 0, output)
     assert(output.contains("Cats Effect resolved by Sprout"), output)
+    assertEquals(resolver.resolutions.size(), 1)
+    assertEquals(resolver.compilerClasspathInvocations.get(), 1)
   }
 
   test("runs MUnit through the framework boundary") {
     val project = copyFixture("munit-project")
-    val result = service.test(project).unsafeRunSync()
+    val resolver = CountingResolver()
+    val result = BuildService(resolver = resolver).test(project).unsafeRunSync()
     assertEquals(result.failed, 0)
     assertEquals(result.total, 1)
+    assertEquals(
+      resolver.resolutions.asScala.toList.map(_.map(_.display)).sortBy(_.mkString),
+      List(Nil, List("org.scalameta::munit:1.1.1"))
+    )
+    assertEquals(resolver.compilerClasspathInvocations.get(), 1)
   }
 
   test("adds, resolves, and removes main and test dependencies") {
@@ -138,3 +154,22 @@ class BuildIntegrationSuite extends munit.FunSuite:
       }
     finally stream.close()
     target
+
+  private final class CountingResolver(delegate: DependencyResolver[IO])
+      extends DependencyResolver[IO]:
+    val resolutions = new ConcurrentLinkedQueue[List[Dependency]]()
+    val compilerClasspathInvocations = AtomicInteger()
+
+    def resolve(
+        scalaVersion: ScalaVersion,
+        dependencies: List[Dependency]
+    ): IO[ResolvedDependencies] =
+      IO(resolutions.add(dependencies)).flatMap(_ => delegate.resolve(scalaVersion, dependencies))
+
+    def compilerClasspath(scalaVersion: ScalaVersion): IO[ResolvedClasspath] =
+      IO(compilerClasspathInvocations.incrementAndGet()).flatMap(_ =>
+        delegate.compilerClasspath(scalaVersion)
+      )
+
+  private object CountingResolver:
+    def apply(): CountingResolver = new CountingResolver(CoursierDependencyResolver())

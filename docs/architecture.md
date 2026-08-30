@@ -35,13 +35,26 @@ Dependencies point inward toward `core`; infrastructure modules do not depend on
 multi-module planner can issue multiple compilation requests without changing resolver or compiler
 interfaces.
 
+## Build sessions
+
+Every build-oriented CLI invocation loads one immutable `BuildSession`. It retains the project,
+resolved main dependencies, optional resolved test dependencies, compiler classpath, and derived
+compile/runtime classpaths for that command. `compile`, `run`, and `package` resolve the main graph
+once. `test` resolves the distinct main and combined test graphs once each. A session is intentionally
+short-lived; it is not global mutable state or a daemon cache.
+
 ## Local state and caching
 
 Project outputs live below `.sprout/`: main classes, test classes, metadata, and application packages.
 Dependencies use Coursier's established global artifact cache during builds and are copied into an
 application distribution only by `sprout package`. Compilation metadata is keyed from source
-contents, compiler version and options, and resolved classpath content.
-An output is reusable only when the key matches and the output directory still exists.
+contents, compiler version and options, JVM target, and ordered resolved classpath content. An output
+is reusable only when the input key and the content fingerprint of every generated file both match.
+
+Cache entries carry a metadata format version and use a temporary sibling plus atomic rename. Invalid
+versions and malformed files are cache misses rather than build failures. The same atomic metadata
+writer is the required boundary for Zinc analysis stores, so a cancelled or failed process cannot
+leave a partially written analysis file at its final path.
 
 ## Zinc integration
 
