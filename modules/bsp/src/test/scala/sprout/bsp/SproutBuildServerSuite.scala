@@ -2,7 +2,7 @@ package sprout.bsp
 
 import ch.epfl.scala.bsp4j.*
 import java.nio.file.Files
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.{CopyOnWriteArrayList, CountDownLatch, TimeUnit}
 import scala.jdk.CollectionConverters.*
 
 class SproutBuildServerSuite extends munit.FunSuite:
@@ -93,6 +93,30 @@ class SproutBuildServerSuite extends munit.FunSuite:
     assertEquals(cleared.getOriginId, "success-check")
     assertEquals(cleared.getDiagnostics.size(), 0)
     assert(cleared.getReset.booleanValue)
+  }
+
+  test("requests lifecycle termination after shutdown and exit") {
+    val shutdownRequested = CountDownLatch(1)
+    val shutdownServer = SproutBuildServer(
+      Files.createTempDirectory("sprout-bsp-shutdown"),
+      "test",
+      () => shutdownRequested.countDown()
+    )
+
+    shutdownServer.buildShutdown().get()
+
+    assert(shutdownRequested.await(1, TimeUnit.SECONDS))
+
+    val exitRequested = CountDownLatch(1)
+    val exitServer = SproutBuildServer(
+      Files.createTempDirectory("sprout-bsp-exit"),
+      "test",
+      () => exitRequested.countDown()
+    )
+
+    exitServer.onBuildExit()
+
+    assert(exitRequested.await(100, TimeUnit.MILLISECONDS))
   }
 
 private final class RecordingBuildClient extends BuildClient:
