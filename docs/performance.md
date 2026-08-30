@@ -16,6 +16,8 @@ Performance is a product constraint, but correctness defines whether cached work
   match. Missing or modified output invokes Zinc, which uses its persisted analysis to select the
   affected sources or safely performs a full compilation when analysis is unavailable.
 - Timestamps are not treated as proof that source contents are unchanged.
+- Main-class discovery scans compiled classes in-process; it does not start one `javap` JVM per
+  class.
 
 Main and test compilation have separate fingerprints and Zinc analysis stores. A source-only
 implementation change recompiles that source without rewriting unrelated class files; API changes
