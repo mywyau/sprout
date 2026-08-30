@@ -37,6 +37,13 @@ working ordinary Scala build before expanding the surface area.
 - Deterministic `graph` output with repetition and eviction markers
 - `why` queries showing every path to a dependency
 
+## v0.2.5
+
+- `package` for JVM applications
+- Runnable application directory distributions
+- Deterministic `.tar.gz` and `.zip` archives with SHA-256 checksums
+- Packaged execution and installed-distribution tests
+
 ## Next
 
 - Stronger local metadata caching
@@ -49,7 +56,7 @@ working ordinary Scala build before expanding the surface area.
 
 ## v0.4
 
-- Packaging and publishing
+- Library packaging and publishing
 - Dependency exclusions and richer conflict diagnostics
 
 ## v1.0

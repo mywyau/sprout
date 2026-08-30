@@ -8,7 +8,8 @@ execution boundaries. It is not a general task engine.
 cli ─────> config ──> core <── dependencies
  │          ▲         ▲       (Coursier)
  ├────────> bsp ──────┼────── compiler
- └────────────────────┼────── runner
+ ├────────────────────┼────── runner
+ └────────────────────┼────── packager
 ```
 
 ## Modules
@@ -23,6 +24,9 @@ cli ─────> config ──> core <── dependencies
 - `compiler` owns compilation requests and the compiler boundary. The first backend starts Dotty in
   an isolated JVM; callers do not depend on that choice.
 - `runner` starts JVM applications and provides a test-framework boundary. MUnit is the first adapter.
+- `packager` creates deterministic application directories, JARs, launchers, archives, and checksums.
+  It consumes compiled output and an ordered runtime classpath but knows nothing about CLI parsing or
+  dependency resolution.
 - `bsp` translates the standard Build Server Protocol into project, resolution, and compilation
   operations. It owns no editor-specific build logic.
 - `cli` contains command parsing, compact presentation, project generation, and build orchestration.
@@ -33,9 +37,10 @@ interfaces.
 
 ## Local state and caching
 
-Project outputs live below `.sprout/`: main classes, test classes, and metadata. Dependencies use
-Coursier's established global artifact cache and are never copied into the project. Compilation
-metadata is keyed from source contents, compiler version and options, and resolved classpath content.
+Project outputs live below `.sprout/`: main classes, test classes, metadata, and application packages.
+Dependencies use Coursier's established global artifact cache during builds and are copied into an
+application distribution only by `sprout package`. Compilation metadata is keyed from source
+contents, compiler version and options, and resolved classpath content.
 An output is reusable only when the key matches and the output directory still exists.
 
 ## Zinc integration

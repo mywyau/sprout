@@ -31,6 +31,25 @@ class BuildIntegrationSuite extends munit.FunSuite:
     service.run(project, Nil).unsafeRunSync()
   }
 
+  test("packages and executes an application with resolved runtime dependencies") {
+    val project = copyFixture("cats-effect-app")
+    val result = service.packageApplication(project).unsafeRunSync()
+
+    assert(Files.isDirectory(result.applicationDirectory))
+    assert(Files.isRegularFile(result.tarArchive))
+    assert(Files.isRegularFile(result.zipArchive))
+    assert(Files.isRegularFile(result.archiveChecksums))
+    assert(result.dependencyCount > 0)
+
+    val launcher = result.applicationDirectory.resolve("bin/cats-effect-app")
+    val process = new ProcessBuilder(launcher.toString).redirectErrorStream(true).start()
+    val output =
+      new String(process.getInputStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+    val exitCode = process.waitFor()
+    assertEquals(exitCode, 0, output)
+    assert(output.contains("Cats Effect resolved by Sprout"), output)
+  }
+
   test("runs MUnit through the framework boundary") {
     val project = copyFixture("munit-project")
     val result = service.test(project).unsafeRunSync()

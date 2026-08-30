@@ -77,11 +77,39 @@ sprout run
 # Hello from Sprout!
 
 sprout test
+sprout package
 sprout clean
 ```
 
 `new` creates a conventional application and one MUnit test. Generated state stays under `.sprout/`;
 `clean` removes only that directory and leaves Coursier's global artifact cache intact.
+
+### Package for production
+
+Create a self-contained application distribution after choosing a single main class:
+
+```bash
+sprout package
+.sprout/package/hello/bin/hello
+```
+
+The command writes a runnable directory, `.tar.gz` and `.zip` archives, and SHA-256 checksums below
+`.sprout/package/`. The directory contains small Unix and Windows launchers, the application JAR,
+ordered runtime dependency JARs, resources, and metadata. Test dependencies are excluded. A target
+machine needs a compatible JRE, but it does not need Sprout, Scala, Coursier, or sbt.
+
+For example, after running `sprout package`, a minimal container image can copy the unpacked
+distribution directly:
+
+```dockerfile
+FROM eclipse-temurin:21-jre
+WORKDIR /opt/hello
+COPY .sprout/package/hello/ ./
+ENTRYPOINT ["./bin/hello"]
+```
+
+Sprout deliberately produces deployment inputs rather than building or publishing container images.
+See [application packaging](docs/packaging.md) for the layout and checksum commands.
 
 ### VS Code and Metals
 
@@ -201,6 +229,7 @@ src/test/scala       src/test/resources
 | `sprout compile` | Resolve and compile main sources |
 | `sprout run [ARGS]` | Compile, detect one main class, and run it |
 | `sprout test` | Compile and run MUnit suites |
+| `sprout package` | Create a runnable application directory, archives, and checksums |
 | `sprout clean` | Delete project-local `.sprout/` state |
 | `sprout add [--test] COORDINATE` | Resolve and add a main or test dependency |
 | `sprout remove [--test] NAME` | Remove a main or test dependency |
@@ -219,9 +248,10 @@ sbt check
 ```
 
 Real integration fixtures cover a basic app, Coursier dependency resolution, a compiler error, and an
-MUnit project. CI additionally installs a packaged archive into a temporary location and exercises
-`new`, dependency editing and diagnostics, BSP setup and compilation, SemanticDB generation, `run`,
-`test`, and `clean`.
+MUnit project. CI additionally installs a packaged Sprout archive into a temporary location and
+exercises `new`, dependency editing and diagnostics, BSP setup and compilation, SemanticDB
+generation, `run`, `test`, application packaging, packaged execution, checksum verification, and
+`clean`.
 `benchmarks/measure.sh` provides coarse startup/cold/no-change measurements intended for tracking
 trends, not claims.
 
@@ -248,8 +278,8 @@ The `Release` workflow then:
 
 1. Tests and assembles Sprout with the tag-derived version.
 2. Creates archives, checksums, the installer, and a Homebrew formula.
-3. Installs the packaged archive and exercises BSP setup/import/compilation, `new`, `run`, `test`, and
-   `clean`.
+3. Installs the packaged archive and exercises BSP setup/import/compilation, `new`, `run`, `test`,
+   application packaging, packaged execution, checksum verification, and `clean`.
 4. Publishes or refreshes the GitHub release assets.
 5. Commits the formula to `mywyau/homebrew-tap` when it changed.
 
@@ -276,8 +306,8 @@ unchanged Homebrew formula does not produce an empty commit. See the full
 [release guide](docs/releasing.md) for details.
 
 See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md),
-[performance](docs/performance.md), and [release process](docs/releasing.md) for design details and
-current direction.
+[performance](docs/performance.md), [application packaging](docs/packaging.md), and
+[release process](docs/releasing.md) for design details and current direction.
 
 ## Current limitations
 
@@ -286,4 +316,4 @@ version, compiler options, and classpath artifact identities. It is not incremen
 compilation; Zinc is the planned backend for that. Dependency diagnostics currently cover the main
 scope; test-scope graph queries are not yet exposed. BSP currently covers editor import, dependency
 sources, and compilation but not editor run, test, or debug requests. There is no lockfile, daemon,
-package command, publishing, or multi-module support yet.
+library publishing, container-image creation, or multi-module support yet.

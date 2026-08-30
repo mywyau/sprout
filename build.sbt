@@ -44,6 +44,18 @@ lazy val runner = project
     libraryDependencies ++= Seq("org.scala-sbt" % "test-interface" % "1.0", catsEffect, munit)
   )
 
+lazy val packager = project
+  .in(file("modules/packager"))
+  .dependsOn(core)
+  .settings(
+    name := "sprout-packager",
+    libraryDependencies ++= Seq(
+      "org.apache.commons" % "commons-compress" % "1.28.0",
+      catsEffect,
+      munit
+    )
+  )
+
 lazy val bsp = project
   .in(file("modules/bsp"))
   .dependsOn(core, config, dependencies, compiler)
@@ -54,7 +66,7 @@ lazy val bsp = project
 
 lazy val cli = project
   .in(file("modules/cli"))
-  .dependsOn(core, config, dependencies, compiler, runner, bsp)
+  .dependsOn(core, config, dependencies, compiler, runner, packager, bsp)
   .settings(
     name := "sprout-cli",
     libraryDependencies ++= Seq(catsEffect, munit),
@@ -76,7 +88,7 @@ lazy val cli = project
 
 lazy val root = project
   .in(file("."))
-  .aggregate(core, config, dependencies, compiler, runner, bsp, cli)
+  .aggregate(core, config, dependencies, compiler, runner, packager, bsp, cli)
   .settings(name := "sprout", publish / skip := true)
 
 addCommandAlias("check", ";scalafmtCheckAll;test")

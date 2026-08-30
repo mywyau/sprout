@@ -108,6 +108,7 @@ final case class ProjectLayout(
   def testClasses: Path = buildDirectory.resolve("test-classes")
   def cacheDirectory: Path = buildDirectory.resolve("cache")
   def metadataDirectory: Path = buildDirectory.resolve("metadata")
+  def packageDirectory: Path = buildDirectory.resolve("package")
 
 object ProjectLayout:
   def conventional(root: Path): ProjectLayout = ProjectLayout(

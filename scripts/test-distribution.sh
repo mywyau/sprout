@@ -44,6 +44,20 @@ mkdir -p "$TEMPORARY_ROOT/projects"
   "$INSTALLED_SPROUT" add --test org.scalameta::munit:1.1.1 | grep -F "Added munit" >/dev/null
   "$INSTALLED_SPROUT" run | grep -F "Hello from Sprout!" >/dev/null
   "$INSTALLED_SPROUT" test | grep -F "1 test(s) passed" >/dev/null
+  "$INSTALLED_SPROUT" package | grep -F "Package created" >/dev/null
+  .sprout/package/hello/bin/hello | grep -F "Hello from Sprout!" >/dev/null
+  [ -f .sprout/package/hello/lib/hello.jar ]
+  [ -f .sprout/package/hello.tar.gz ]
+  [ -f .sprout/package/hello.zip ]
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd .sprout/package && sha256sum -c hello-checksums.txt >/dev/null)
+  else
+    (cd .sprout/package && shasum -a 256 -c hello-checksums.txt >/dev/null)
+  fi
+  if find .sprout/package/hello/lib -name '*munit*' | grep -q .; then
+    printf '%s\n' "test dependency leaked into the application package" >&2
+    exit 1
+  fi
   "$INSTALLED_SPROUT" clean >/dev/null
   [ ! -e .sprout ]
 )

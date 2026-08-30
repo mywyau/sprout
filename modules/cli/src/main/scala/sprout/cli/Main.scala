@@ -48,6 +48,19 @@ object Main extends IOApp:
         service
           .test(Path.of("."))
           .flatMap(result => IO.println(s"\n✓ ${result.total} test(s) passed"))
+      case CliCommand.Package =>
+        service.packageApplication(Path.of(".")).flatMap { result =>
+          IO.println(
+            s"""\n✓ Package created
+               |
+               |Application   ${result.applicationDirectory}
+               |Archive       ${result.tarArchive}
+               |ZIP           ${result.zipArchive}
+               |Checksums     ${result.archiveChecksums}
+               |Main class    ${result.mainClass}
+               |Dependencies  ${result.dependencyCount}""".stripMargin
+          )
+        }
       case CliCommand.Clean =>
         service.clean(Path.of(".")).flatMap(_ => IO.println("✓ Cleaned .sprout"))
       case CliCommand.Add(coordinate, scope) =>
@@ -89,6 +102,7 @@ object Main extends IOApp:
        |  compile    Compile main sources
        |  run [ARGS] Compile and run the application
        |  test       Compile and run MUnit tests
+       |  package    Create a runnable application directory and archives
        |  clean      Delete project-local build state
        |  add [--test] COORDINATE
        |              Add and resolve a dependency

@@ -5,6 +5,7 @@ import sprout.core.*
 import sprout.config.{ProjectConfig, ProjectConfigEditor}
 import sprout.compiler.{CachingScalaCompiler, FileCache, ProcessScalaCompiler}
 import sprout.dependencies.CoursierDependencyResolver
+import sprout.packager.{ApplicationPackageRequest, ApplicationPackager, ApplicationPackageResult}
 import sprout.runner.{JvmApplicationRunner, MainClassDiscovery, MUnitTestRunner}
 import java.nio.file.{Files, Path}
 
@@ -13,6 +14,7 @@ final class BuildService:
   private val processCompiler: ScalaCompiler[IO] = ProcessScalaCompiler()
   private val applicationRunner: ApplicationRunner[IO] = JvmApplicationRunner()
   private val testRunner: TestRunner[IO] = MUnitTestRunner()
+  private lazy val applicationPackager = ApplicationPackager()
 
   def compile(from: Path): IO[CompilationResult] =
     load(from).flatMap { project =>
@@ -73,6 +75,27 @@ final class BuildService:
         (project.layout.testResources ++ project.layout.mainResources ++ dependencies.classpath.paths)
       result <- testRunner.run(List(project.layout.testClasses), runtimeClasspath)
       _ <- IO.raiseWhen(result.failed > 0)(SproutError.User(s"${result.failed} test(s) failed"))
+    yield result
+
+  def packageApplication(from: Path): IO[ApplicationPackageResult] =
+    for
+      project <- load(from)
+      _ <- compile(from).flatMap(reportCompilation)
+      dependencies <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
+      discoveryClasspath = project.layout.mainClasses ::
+        (project.layout.mainResources ++ dependencies.classpath.paths)
+      mainClass <- MainClassDiscovery.discover(project.layout.mainClasses, discoveryClasspath)
+      result <- applicationPackager.create(
+        ApplicationPackageRequest(
+          project.name.value,
+          project.scalaVersion.value,
+          mainClass,
+          project.layout.mainClasses,
+          project.layout.mainResources,
+          dependencies.classpath.paths,
+          project.layout.packageDirectory
+        )
+      )
     yield result
 
   def clean(from: Path): IO[Unit] =

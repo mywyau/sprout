@@ -9,6 +9,7 @@ enum CliCommand:
   case Compile
   case Run(arguments: List[String])
   case Test
+  case Package
   case Clean
   case Add(coordinate: String, scope: DependencyScope)
   case Remove(name: String, scope: DependencyScope)
@@ -30,6 +31,8 @@ object Cli:
       case "compile" :: Nil                    => Right(CliInvocation(CliCommand.Compile, debug))
       case "run" :: tail                       => Right(CliInvocation(CliCommand.Run(tail), debug))
       case "test" :: Nil                       => Right(CliInvocation(CliCommand.Test, debug))
+      case "package" :: Nil                    => Right(CliInvocation(CliCommand.Package, debug))
+      case "package" :: _                      => Left("Usage: sprout package")
       case "clean" :: Nil                      => Right(CliInvocation(CliCommand.Clean, debug))
       case "add" :: tail    => scopedArgument("add", tail, CliCommand.Add.apply, debug)
       case "remove" :: tail =>
