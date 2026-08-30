@@ -43,10 +43,10 @@ object Main extends IOApp:
           case CompilationResult.Compiled(_) => IO.println("\n✓ Build succeeded")
           case CompilationResult.UpToDate    => IO.println("\n✓ Nothing to build")
         }
-      case CliCommand.Run(arguments) => service.run(Path.of("."), arguments)
-      case CliCommand.Test           =>
+      case CliCommand.Run(arguments)  => service.run(Path.of("."), arguments)
+      case CliCommand.Test(selection) =>
         service
-          .test(Path.of("."))
+          .test(Path.of("."), selection)
           .flatMap(result => IO.println(s"\n✓ ${result.total} test(s) passed"))
       case CliCommand.Package =>
         service.packageApplication(Path.of(".")).flatMap { result =>
@@ -101,7 +101,8 @@ object Main extends IOApp:
        |  new NAME   Create a Scala project
        |  compile    Compile main sources
        |  run [ARGS] Compile and run the application
-       |  test       Compile and run MUnit tests
+       |  test [SUITE_OR_FILE]
+       |             Compile tests and run all or one MUnit suite
        |  package    Create a runnable application directory and archives
        |  clean      Delete project-local build state
        |  add [--test] COORDINATE

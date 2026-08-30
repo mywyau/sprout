@@ -143,6 +143,8 @@ sprout compile  # cold compilation
 sprout compile  # should report nothing to build
 sprout run
 sprout test
+sprout test MainSuite
+sprout test src/test/scala/MainSuite.scala
 sprout clean
 test ! -e .sprout
 ```
@@ -228,7 +230,7 @@ src/test/scala       src/test/resources
 | `sprout new NAME` | Generate an application and MUnit test |
 | `sprout compile` | Resolve and compile main sources |
 | `sprout run [ARGS]` | Compile, detect one main class, and run it |
-| `sprout test` | Compile and run MUnit suites |
+| `sprout test [SUITE_OR_FILE]` | Compile tests and run all or one MUnit suite |
 | `sprout package` | Create a runnable application directory, archives, and checksums |
 | `sprout clean` | Delete project-local `.sprout/` state |
 | `sprout add [--test] COORDINATE` | Resolve and add a main or test dependency |

@@ -44,6 +44,8 @@ mkdir -p "$TEMPORARY_ROOT/projects"
   "$INSTALLED_SPROUT" add --test org.scalameta::munit:1.1.1 | grep -F "Added munit" >/dev/null
   "$INSTALLED_SPROUT" run | grep -F "Hello from Sprout!" >/dev/null
   "$INSTALLED_SPROUT" test | grep -F "1 test(s) passed" >/dev/null
+  "$INSTALLED_SPROUT" test MainSuite | grep -F "1 test(s) passed" >/dev/null
+  "$INSTALLED_SPROUT" test src/test/scala/MainSuite.scala | grep -F "1 test(s) passed" >/dev/null
   "$INSTALLED_SPROUT" package | grep -F "Package created" >/dev/null
   .sprout/package/hello/bin/hello | grep -F "Hello from Sprout!" >/dev/null
   [ -f .sprout/package/hello/lib/hello.jar ]

@@ -28,6 +28,14 @@ trait ApplicationRunner[F[_]]:
   def run(mainClass: String, classpath: List[Path], arguments: List[String]): F[Int]
 
 trait TestRunner[F[_]]:
-  def run(classDirectories: List[Path], classpath: List[Path]): F[TestResult]
+  def run(
+      classDirectories: List[Path],
+      classpath: List[Path],
+      selection: TestSelection = TestSelection.All
+  ): F[TestResult]
 
 final case class TestResult(total: Int, failed: Int)
+
+enum TestSelection:
+  case All
+  case Suite(name: String)

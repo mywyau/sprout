@@ -33,7 +33,7 @@ final class BuildService(
       _ <- IO.raiseWhen(exit != 0)(SproutError.Process("Application", exit))
     yield ()
 
-  def test(from: Path): IO[TestResult] =
+  def test(from: Path, selector: Option[String] = None): IO[TestResult] =
     for
       session <- sessionWithTests(from)
       testBuild <- IO.fromOption(session.test)(
@@ -44,6 +44,7 @@ final class BuildService(
       _ <- IO.raiseWhen(sources.isEmpty)(
         SproutError.User("No Scala test sources found under src/test/scala")
       )
+      selection <- testSelection(selector, session.project)
       _ <- compiler(session.project, "test-compile")
         .compile(
           CompilationRequest(
@@ -63,7 +64,8 @@ final class BuildService(
         .flatMap(reportCompilation)
       result <- testRunner.run(
         List(session.project.layout.testClasses),
-        testBuild.runtimeClasspath
+        testBuild.runtimeClasspath,
+        selection
       )
       _ <- IO.raiseWhen(result.failed > 0)(SproutError.User(s"${result.failed} test(s) failed"))
     yield result
@@ -188,6 +190,32 @@ final class BuildService(
       scalaCompiler,
       FileCache(project.layout.metadataDirectory.resolve(cacheName))
     )
+
+  private def testSelection(selector: Option[String], project: Project): IO[TestSelection] =
+    selector match
+      case None                              => IO.pure(TestSelection.All)
+      case Some(value) if value.trim.isEmpty =>
+        IO.raiseError(SproutError.User("Test suite or source file must not be empty"))
+      case Some(value) if value.endsWith(".scala") =>
+        IO.blocking {
+          val requested = Path.of(value)
+          val source =
+            if requested.isAbsolute then requested.normalize
+            else project.layout.root.resolve(requested).normalize
+          val sourceRoot = project.layout.testSources
+            .map(_.toAbsolutePath.normalize)
+            .find(source.startsWith)
+            .getOrElse(
+              throw SproutError.User(
+                s"Test source '$value' must be under src/test/scala"
+              )
+            )
+          if !Files.isRegularFile(source) then
+            throw SproutError.User(s"Test source file not found: $value")
+          val relative = sourceRoot.relativize(source).toString.stripSuffix(".scala")
+          TestSelection.Suite(relative.replace(java.io.File.separatorChar, '.'))
+        }
+      case Some(value) => IO.pure(TestSelection.Suite(value.trim))
 
   private def resolving[A](action: IO[A]): IO[A] =
     IO.println("Resolving dependencies...") *> action

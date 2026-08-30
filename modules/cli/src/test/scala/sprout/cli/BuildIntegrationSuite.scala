@@ -118,12 +118,28 @@ class BuildIntegrationSuite extends munit.FunSuite:
     val resolver = CountingResolver()
     val result = BuildService(resolver = resolver).test(project).unsafeRunSync()
     assertEquals(result.failed, 0)
-    assertEquals(result.total, 1)
+    assertEquals(result.total, 2)
     assertEquals(
       resolver.resolutions.asScala.toList.map(_.map(_.display)).sortBy(_.mkString),
       List(Nil, List("org.scalameta::munit:1.1.1"))
     )
     assertEquals(resolver.compilerClasspathInvocations.get(), 1)
+  }
+
+  test("runs one MUnit suite selected by name or conventional source path") {
+    val project = copyFixture("munit-project")
+
+    val byName = service.test(project, Some("CalculatorSuite")).unsafeRunSync()
+    val byFile = service
+      .test(project, Some("src/test/scala/AnotherSuite.scala"))
+      .unsafeRunSync()
+
+    assertEquals(byName, TestResult(total = 1, failed = 0))
+    assertEquals(byFile, TestResult(total = 1, failed = 0))
+    intercept[SproutError.User](service.test(project, Some("MissingSuite")).unsafeRunSync())
+    intercept[SproutError.User](
+      service.test(project, Some("src/main/scala/Calculator.scala")).unsafeRunSync()
+    )
   }
 
   test("adds, resolves, and removes main and test dependencies") {

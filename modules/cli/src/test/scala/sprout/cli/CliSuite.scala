@@ -23,6 +23,24 @@ class CliSuite extends munit.FunSuite:
     assertEquals(Cli.parse(List("bsp")), Right(CliInvocation(CliCommand.Bsp, false)))
   }
 
+  test("parses an optional MUnit suite or source file") {
+    assertEquals(
+      Cli.parse(List("test")),
+      Right(CliInvocation(CliCommand.Test(None), false))
+    )
+    assertEquals(
+      Cli.parse(List("test", "CalculatorSuite")),
+      Right(CliInvocation(CliCommand.Test(Some("CalculatorSuite")), false))
+    )
+    assertEquals(
+      Cli.parse(List("test", "src/test/scala/CalculatorSuite.scala")),
+      Right(
+        CliInvocation(CliCommand.Test(Some("src/test/scala/CalculatorSuite.scala")), false)
+      )
+    )
+    assertEquals(Cli.parse(List("test", "one", "two")), Left("Usage: sprout test [SUITE_OR_FILE]"))
+  }
+
   test("parses dependency commands and test scope") {
     assertEquals(
       Cli.parse(List("add", "org.typelevel::cats-effect:3.6.3")),

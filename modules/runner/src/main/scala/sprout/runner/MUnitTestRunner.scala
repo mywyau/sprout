@@ -8,15 +8,20 @@ import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.*
 
 final class MUnitTestRunner extends TestRunner[IO]:
-  def run(classDirectories: List[Path], classpath: List[Path]): IO[TestResult] = IO.blocking {
+  def run(
+      classDirectories: List[Path],
+      classpath: List[Path],
+      selection: TestSelection = TestSelection.All
+  ): IO[TestResult] = IO.blocking {
     // Share sbt.testing types with Sprout while loading the project's framework and suites in isolation.
     val loader = new URLClassLoader(classpath.map(_.toUri.toURL).toArray, getClass.getClassLoader)
     try
       val suiteClass = loader.loadClass("munit.Suite")
-      val candidates = classDirectories.flatMap(classNames).filter { name =>
+      val allCandidates = classDirectories.flatMap(classNames).sorted.filter { name =>
         try suiteClass.isAssignableFrom(loader.loadClass(name))
         catch case _: Throwable => false
       }
+      val candidates = selectSuites(allCandidates, selection)
       if candidates.isEmpty then throw SproutError.User("No MUnit test suites found")
       val framework = loader
         .loadClass("munit.Framework")
@@ -73,3 +78,20 @@ final class MUnitTestRunner extends TestRunner[IO]:
           )
           .toList
       finally stream.close()
+
+  private def selectSuites(candidates: List[String], selection: TestSelection): List[String] =
+    selection match
+      case TestSelection.All         => candidates
+      case TestSelection.Suite(name) =>
+        val selected =
+          if name.contains('.') then candidates.filter(_ == name)
+          else candidates.filter(_.split('.').lastOption.contains(name))
+        selected match
+          case Nil =>
+            throw SproutError.User(s"No MUnit suite matches '$name'")
+          case suite :: Nil => List(suite)
+          case many         =>
+            throw SproutError.User(
+              s"MUnit suite name '$name' is ambiguous:\n\n${many.sorted.mkString("\n")}\n\n" +
+                "Use a fully qualified suite name or a source file path."
+            )
