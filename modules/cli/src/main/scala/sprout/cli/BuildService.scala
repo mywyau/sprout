@@ -26,7 +26,7 @@ final class BuildService:
         result <- compiler(project).compile(
           CompilationRequest(
             sources,
-            dependencies.paths,
+            dependencies.classpath.paths,
             compilerClasspath.paths,
             project.layout.mainClasses,
             project.scalaVersion
@@ -40,7 +40,8 @@ final class BuildService:
       project <- load(from)
       _ <- compile(from).flatMap(reportCompilation)
       dependencies <- resolver.resolve(project.scalaVersion, project.mainDependencies)
-      classpath = project.layout.mainClasses :: project.layout.mainResources ++ dependencies.paths
+      classpath = project.layout.mainClasses ::
+        (project.layout.mainResources ++ dependencies.classpath.paths)
       mainClass <- MainClassDiscovery.discover(project.layout.mainClasses, classpath)
       exit <- applicationRunner.run(mainClass, classpath, arguments)
       _ <- IO.raiseWhen(exit != 0)(SproutError.Process("Application", exit))
@@ -56,7 +57,7 @@ final class BuildService:
       )
       dependencies <- resolving(resolver.resolve(project.scalaVersion, project.testDependencies))
       compilerClasspath <- resolver.compilerClasspath(project.scalaVersion)
-      testClasspath = project.layout.mainClasses :: dependencies.paths
+      testClasspath = project.layout.mainClasses :: dependencies.classpath.paths
       _ <- compiler(project)
         .compile(
           CompilationRequest(
@@ -69,7 +70,7 @@ final class BuildService:
         )
         .flatMap(reportCompilation)
       runtimeClasspath = project.layout.testClasses :: project.layout.mainClasses ::
-        (project.layout.testResources ++ project.layout.mainResources ++ dependencies.paths)
+        (project.layout.testResources ++ project.layout.mainResources ++ dependencies.classpath.paths)
       result <- testRunner.run(List(project.layout.testClasses), runtimeClasspath)
       _ <- IO.raiseWhen(result.failed > 0)(SproutError.User(s"${result.failed} test(s) failed"))
     yield result
@@ -90,12 +91,33 @@ final class BuildService:
         case DependencyScope.Test => project.testDependencies :+ dependency
       classpath <- resolving(resolver.resolve(project.scalaVersion, candidateDependencies))
       name <- ProjectConfigEditor.add(config, dependency)
-    yield AddedDependency(name, dependency, classpath.artifacts.size)
+    yield AddedDependency(name, dependency, classpath.classpath.artifacts.size)
 
   def remove(from: Path, name: String, scope: DependencyScope): IO[Unit] =
     ProjectConfig.locate(from).flatMap(ProjectConfigEditor.remove(_, name, scope))
 
+  def graph(from: Path): IO[String] =
+    resolvedMainDependencies(from).map { case (project, dependencies) =>
+      DependencyReport.graph(project.name.value, dependencies.graph)
+    }
+
+  def why(from: Path, name: String): IO[String] =
+    resolvedMainDependencies(from).flatMap { case (project, dependencies) =>
+      IO.fromEither(
+        DependencyReport
+          .why(project.name.value, dependencies.graph, name)
+          .left
+          .map(SproutError.User.apply)
+      )
+    }
+
   private def load(from: Path): IO[Project] = ProjectConfig.locate(from).flatMap(ProjectConfig.load)
+
+  private def resolvedMainDependencies(from: Path): IO[(Project, ResolvedDependencies)] =
+    for
+      project <- load(from)
+      dependencies <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
+    yield (project, dependencies)
 
   private def compiler(project: Project): ScalaCompiler[IO] =
     CachingScalaCompiler(

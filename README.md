@@ -153,6 +153,18 @@ sprout add --test org.scalameta::munit:1.1.1
 coordinates. Sprout resolves an addition before atomically updating `sprout.toml`, so an unavailable
 version leaves the configuration unchanged. Dependency names default to the artifact name.
 
+Inspect the selected dependency graph and find everything that introduces a transitive dependency:
+
+```bash
+sprout graph
+sprout why cats-core
+```
+
+`graph` is deterministic, marks dependencies shared by multiple branches as repeated, and shows both
+requested and selected versions when Coursier resolves a conflict. `why` prints every path from a
+direct dependency to the requested module. Use `organisation:artifact` if a short artifact name is
+ambiguous.
+
 ## Configuration
 
 Sprout projects use declarative TOML and never execute build code:
@@ -192,6 +204,8 @@ src/test/scala       src/test/resources
 | `sprout clean` | Delete project-local `.sprout/` state |
 | `sprout add [--test] COORDINATE` | Resolve and add a main or test dependency |
 | `sprout remove [--test] NAME` | Remove a main or test dependency |
+| `sprout graph` | Show the resolved main dependency tree |
+| `sprout why NAME` | Show every path introducing a main dependency |
 | `sprout setup-ide` | Install the BSP connection used by Metals-compatible editors |
 
 Pass `--debug` with a command to include stack traces for unexpected failures. Normal configuration,
@@ -206,7 +220,8 @@ sbt check
 
 Real integration fixtures cover a basic app, Coursier dependency resolution, a compiler error, and an
 MUnit project. CI additionally installs a packaged archive into a temporary location and exercises
-`new`, BSP setup and compilation, SemanticDB generation, `run`, `test`, and `clean`.
+`new`, dependency editing and diagnostics, BSP setup and compilation, SemanticDB generation, `run`,
+`test`, and `clean`.
 `benchmarks/measure.sh` provides coarse startup/cold/no-change measurements intended for tracking
 trends, not claims.
 
@@ -268,6 +283,7 @@ current direction.
 
 Compilation caching currently skips an unchanged compilation by hashing source contents, Scala
 version, compiler options, and classpath artifact identities. It is not incremental within a changed
-compilation; Zinc is the planned backend for that. BSP currently covers editor import, dependency
+compilation; Zinc is the planned backend for that. Dependency diagnostics currently cover the main
+scope; test-scope graph queries are not yet exposed. BSP currently covers editor import, dependency
 sources, and compilation but not editor run, test, or debug requests. There is no lockfile, daemon,
 package command, publishing, or multi-module support yet.

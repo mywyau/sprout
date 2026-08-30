@@ -12,6 +12,8 @@ enum CliCommand:
   case Clean
   case Add(coordinate: String, scope: DependencyScope)
   case Remove(name: String, scope: DependencyScope)
+  case Graph
+  case Why(name: String)
   case SetupIde
   case Bsp
 
@@ -32,9 +34,14 @@ object Cli:
       case "add" :: tail    => scopedArgument("add", tail, CliCommand.Add.apply, debug)
       case "remove" :: tail =>
         scopedArgument("remove", tail, CliCommand.Remove.apply, debug)
-      case "setup-ide" :: Nil => Right(CliInvocation(CliCommand.SetupIde, debug))
-      case "bsp" :: Nil       => Right(CliInvocation(CliCommand.Bsp, debug))
-      case command :: _       => Left(s"Unknown command '$command'. Run sprout --help.")
+      case "graph" :: Nil       => Right(CliInvocation(CliCommand.Graph, debug))
+      case "graph" :: _         => Left("Usage: sprout graph")
+      case "why" :: name :: Nil => Right(CliInvocation(CliCommand.Why(name), debug))
+      case "why" :: Nil         => Left("Command 'why' requires a dependency name")
+      case "why" :: _           => Left("Usage: sprout why NAME")
+      case "setup-ide" :: Nil   => Right(CliInvocation(CliCommand.SetupIde, debug))
+      case "bsp" :: Nil         => Right(CliInvocation(CliCommand.Bsp, debug))
+      case command :: _         => Left(s"Unknown command '$command'. Run sprout --help.")
 
   private def scopedArgument(
       command: String,

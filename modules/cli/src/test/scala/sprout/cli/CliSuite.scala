@@ -52,3 +52,12 @@ class CliSuite extends munit.FunSuite:
     assertEquals(Cli.parse(List("add")), Left("Command 'add' requires a coordinate"))
     assert(Cli.parse(List("remove", "one", "two")).isLeft)
   }
+
+  test("parses graph and why commands") {
+    assertEquals(Cli.parse(List("graph")), Right(CliInvocation(CliCommand.Graph, false)))
+    assertEquals(
+      Cli.parse(List("why", "cats-core")),
+      Right(CliInvocation(CliCommand.Why("cats-core"), false))
+    )
+    assertEquals(Cli.parse(List("why")), Left("Command 'why' requires a dependency name"))
+  }

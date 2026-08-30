@@ -60,7 +60,9 @@ object Main extends IOApp:
         service
           .remove(Path.of("."), name, scope)
           .flatMap(_ => IO.println(s"Removed $name\n\nUpdated sprout.toml"))
-      case CliCommand.SetupIde =>
+      case CliCommand.Graph     => service.graph(Path.of(".")).flatMap(IO.println)
+      case CliCommand.Why(name) => service.why(Path.of("."), name).flatMap(IO.println)
+      case CliCommand.SetupIde  =>
         for
           config <- sprout.config.ProjectConfig.locate(Path.of("."))
           root = config.toAbsolutePath.normalize.getParent
@@ -92,6 +94,8 @@ object Main extends IOApp:
        |              Add and resolve a dependency
        |  remove [--test] NAME
        |              Remove a dependency from sprout.toml
+       |  graph       Show the resolved dependency tree
+       |  why NAME    Show every path introducing a dependency
        |  setup-ide  Configure Metals and other BSP-compatible editors
        |
        |Options:

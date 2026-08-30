@@ -17,8 +17,9 @@ cli ─────> config ──> core <── dependencies
   contracts. It has no knowledge of TOML, terminals, or CLI parsing.
 - `config` parses `sprout.toml` into the core model and performs narrow, atomic dependency edits.
   Configuration remains data only; edits never execute project code or rewrite unrelated sections.
-- `dependencies` implements the resolver boundary with Coursier and retains resolved artifacts as a
-  model that can later expose dependency provenance to `graph` and `why`.
+- `dependencies` implements the resolver boundary with Coursier and retains a resolved graph with
+  selected versions, requested versions, parent relations, direct/transitive status, and artifact
+  ownership. Compilation, `graph`, and `why` consume the same resolution result.
 - `compiler` owns compilation requests and the compiler boundary. The first backend starts Dotty in
   an isolated JVM; callers do not depend on that choice.
 - `runner` starts JVM applications and provides a test-framework boundary. MUnit is the first adapter.

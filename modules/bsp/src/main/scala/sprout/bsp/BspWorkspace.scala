@@ -39,7 +39,9 @@ private[bsp] final class BspWorkspace(root: Path):
       resolver.resolve(value.scalaVersion, dependencies),
       resolver.compilerClasspath(value.scalaVersion)
     )
-      .parMapN((resolved, compiler) => TargetClasspath(value, kind, resolved.paths, compiler.paths))
+      .parMapN((resolved, compiler) =>
+        TargetClasspath(value, kind, resolved.classpath.paths, compiler.paths)
+      )
   }
 
   def dependencySources(kind: TargetKind): IO[List[Path]] = project.flatMap { value =>

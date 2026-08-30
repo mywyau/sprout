@@ -24,7 +24,11 @@ lazy val dependencies = project
   .dependsOn(core)
   .settings(
     name := "sprout-dependencies",
-    libraryDependencies ++= Seq("io.get-coursier" % "interface" % "1.0.28", catsEffect, munit)
+    libraryDependencies ++= Seq(
+      "io.get-coursier" % "coursier_2.13" % "2.1.25-M26",
+      catsEffect,
+      munit
+    )
   )
 
 lazy val compiler = project
@@ -60,7 +64,14 @@ lazy val cli = project
       "Implementation-Version" -> version.value
     ),
     assembly / assemblyJarName := "sprout.jar",
-    assembly / assemblyOutputPath := (ThisBuild / baseDirectory).value / "target" / "sprout.jar"
+    assembly / assemblyOutputPath := (ThisBuild / baseDirectory).value / "target" / "sprout.jar",
+    assembly / assemblyMergeStrategy := {
+      val defaultStrategy: String => sbtassembly.MergeStrategy =
+        (assembly / assemblyMergeStrategy).value
+      (path: String) =>
+        if (path.endsWith("module-info.class")) MergeStrategy.discard
+        else defaultStrategy(path)
+    }
   )
 
 lazy val root = project

@@ -133,6 +133,76 @@ final case class ResolvedClasspath(artifacts: List[ResolvedArtifact]):
   def paths: List[Path] = artifacts.map(_.file).distinct
   def render: String = paths.mkString(java.io.File.pathSeparator)
 
+final case class ResolvedModule(organisation: String, name: String):
+  def id: String = s"$organisation:$name"
+  def displayName: String = name.replaceFirst("_(?:2\\.\\d+|3)$", "")
+
+final case class ResolvedDependency(
+    module: ResolvedModule,
+    version: String,
+    direct: Boolean,
+    artifacts: List[Path]
+)
+
+final case class DependencyRelation(
+    parent: Option[ResolvedModule],
+    child: ResolvedModule,
+    requestedVersion: String,
+    selectedVersion: String
+):
+  def evicted: Boolean = requestedVersion != selectedVersion
+
+final case class ResolvedDependencyGraph(
+    modules: List[ResolvedDependency],
+    relations: List[DependencyRelation]
+):
+  private lazy val byModule = modules.map(module => module.module -> module).toMap
+
+  def dependency(module: ResolvedModule): Option[ResolvedDependency] = byModule.get(module)
+
+  def roots: List[DependencyRelation] =
+    relations.filter(_.parent.isEmpty).sortBy(relation => relation.child.id)
+
+  def children(module: ResolvedModule): List[DependencyRelation] =
+    relations
+      .filter(_.parent.contains(module))
+      .sortBy(relation => (relation.child.id, relation.requestedVersion))
+
+  def parents(module: ResolvedModule): List[ResolvedModule] =
+    relations
+      .flatMap(relation => Option.when(relation.child == module)(relation.parent).flatten)
+      .distinct
+      .sortBy(_.id)
+
+  def matching(query: String): List[ResolvedDependency] =
+    val normalized = query.trim
+    modules
+      .filter { dependency =>
+        normalized.split(":", 2).toList match
+          case organisation :: name :: Nil =>
+            dependency.module.organisation == organisation &&
+            (dependency.module.name == name || dependency.module.displayName == name)
+          case _ =>
+            dependency.module.name == normalized || dependency.module.displayName == normalized
+      }
+      .sortBy(_.module.id)
+
+  def pathsTo(target: ResolvedModule): List[List[ResolvedModule]] =
+    def loop(
+        current: ResolvedModule,
+        path: List[ResolvedModule]
+    ): List[List[ResolvedModule]] =
+      if current == target then List(path :+ current)
+      else if path.contains(current) then Nil
+      else children(current).flatMap(relation => loop(relation.child, path :+ current))
+
+    roots.flatMap(relation => loop(relation.child, Nil)).distinct.sortBy(_.map(_.id).mkString("/"))
+
+final case class ResolvedDependencies(
+    classpath: ResolvedClasspath,
+    graph: ResolvedDependencyGraph
+)
+
 final case class CompilationRequest(
     sources: List[Path],
     classpath: List[Path],

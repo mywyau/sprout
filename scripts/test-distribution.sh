@@ -36,6 +36,8 @@ mkdir -p "$TEMPORARY_ROOT/projects"
   ruby "$REPOSITORY_ROOT/scripts/test-bsp.rb" "$INSTALLED_SPROUT" "$PWD" >/dev/null
   "$INSTALLED_SPROUT" add org.typelevel::cats-effect:3.6.3 | grep -F "Added cats-effect" >/dev/null
   grep -F 'cats-effect = "org.typelevel::cats-effect:3.6.3"' sprout.toml >/dev/null
+  "$INSTALLED_SPROUT" graph | grep -F "cats-effect 3.6.3" >/dev/null
+  "$INSTALLED_SPROUT" why cats-core | grep -F "cats-effect 3.6.3" >/dev/null
   "$INSTALLED_SPROUT" remove cats-effect | grep -F "Removed cats-effect" >/dev/null
   ! grep -F 'cats-effect = ' sprout.toml >/dev/null
   "$INSTALLED_SPROUT" remove --test munit >/dev/null

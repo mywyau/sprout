@@ -87,6 +87,21 @@ class BuildIntegrationSuite extends munit.FunSuite:
     assertEquals(Files.readString(config), original)
   }
 
+  test("renders graph and why reports from the resolved Cats Effect model") {
+    val project = copyFixture("cats-effect-app")
+
+    val firstGraph = service.graph(project).unsafeRunSync()
+    val secondGraph = service.graph(project).unsafeRunSync()
+    val why = service.why(project, "cats-core").unsafeRunSync()
+
+    assertEquals(firstGraph, secondGraph)
+    assert(firstGraph.startsWith("cats-effect-app\n└── cats-effect 3.6.3"))
+    assert(firstGraph.contains("cats-core 2.11.0"))
+    assert(why.contains("cats-core 2.11.0"))
+    assert(why.contains("cats-effect 3.6.3"))
+    intercept[SproutError.User](service.why(project, "does-not-exist").unsafeRunSync())
+  }
+
   private def copyFixture(name: String): Path =
     val repository = Iterator
       .iterate(Path.of(".").toAbsolutePath.normalize)(_.getParent)
