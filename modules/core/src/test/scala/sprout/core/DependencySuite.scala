@@ -20,3 +20,10 @@ class DependencySuite extends munit.FunSuite:
   test("rejects incomplete coordinates") {
     assert(Dependency.parse("org.example:library", DependencyScope.Main).isLeft)
   }
+
+  test("rejects whitespace inside coordinate components") {
+    assert(Dependency.parse("org.typelevel::cats effect:3.6.3", DependencyScope.Main).isLeft)
+    assert(
+      Dependency.parse("org.typelevel::cats-effect:latest release", DependencyScope.Main).isLeft
+    )
+  }

@@ -22,10 +22,18 @@ working ordinary Scala build before expanding the surface area.
 - Installed-distribution BSP and SemanticDB release tests
 - Positioned compiler diagnostics through BSP
 
+## v0.2.2
+
+- Cross-platform BSP shutdown lifecycle
+
+## v0.2.3
+
+- Dependency `add` and `remove` for main and test scopes
+- Resolution validation before atomic configuration updates
+
 ## Next
 
 - Stronger local metadata caching
-- Dependency `add` and `remove`
 - Zinc incremental compilation
 
 ## v0.3

@@ -27,21 +27,27 @@ object ScalaVersion:
 
 opaque type Organisation = String
 object Organisation:
-  def from(value: String): Either[String, Organisation] = nonEmpty("organisation", value)
+  def from(value: String): Either[String, Organisation] = coordinatePart("organisation", value)
   extension (value: Organisation) def value: String = value
 
 opaque type ArtifactName = String
 object ArtifactName:
-  def from(value: String): Either[String, ArtifactName] = nonEmpty("artifact", value)
+  def from(value: String): Either[String, ArtifactName] = coordinatePart("artifact", value)
   extension (value: ArtifactName) def value: String = value
 
 opaque type DependencyVersion = String
 object DependencyVersion:
-  def from(value: String): Either[String, DependencyVersion] = nonEmpty("dependency version", value)
+  def from(value: String): Either[String, DependencyVersion] =
+    coordinatePart("dependency version", value)
   extension (value: DependencyVersion) def value: String = value
 
-private def nonEmpty[A](label: String, value: String): Either[String, A] =
-  Either.cond(value.trim.nonEmpty, value.trim.asInstanceOf[A], s"$label must not be empty")
+private def coordinatePart[A](label: String, value: String): Either[String, A] =
+  val trimmed = value.trim
+  Either.cond(
+    trimmed.nonEmpty && !trimmed.exists(character => character.isWhitespace || character == ':'),
+    trimmed.asInstanceOf[A],
+    s"$label must be non-empty and contain no whitespace or ':'"
+  )
 
 enum DependencyScope:
   case Main, Test

@@ -2,7 +2,7 @@ package sprout.cli
 
 import cats.effect.IO
 import sprout.core.*
-import sprout.config.ProjectConfig
+import sprout.config.{ProjectConfig, ProjectConfigEditor}
 import sprout.compiler.{CachingScalaCompiler, FileCache, ProcessScalaCompiler}
 import sprout.dependencies.CoursierDependencyResolver
 import sprout.runner.{JvmApplicationRunner, MainClassDiscovery, MUnitTestRunner}
@@ -77,6 +77,24 @@ final class BuildService:
   def clean(from: Path): IO[Unit] =
     load(from).flatMap(project => deleteTree(project.layout.buildDirectory))
 
+  def add(from: Path, coordinate: String, scope: DependencyScope): IO[AddedDependency] =
+    for
+      config <- ProjectConfig.locate(from)
+      project <- ProjectConfig.load(config)
+      dependency <- IO.fromEither(
+        Dependency.parse(coordinate, scope).left.map(SproutError.User.apply)
+      )
+      _ <- ProjectConfigEditor.validateAddition(config, dependency)
+      candidateDependencies = scope match
+        case DependencyScope.Main => project.mainDependencies :+ dependency
+        case DependencyScope.Test => project.testDependencies :+ dependency
+      classpath <- resolving(resolver.resolve(project.scalaVersion, candidateDependencies))
+      name <- ProjectConfigEditor.add(config, dependency)
+    yield AddedDependency(name, dependency, classpath.artifacts.size)
+
+  def remove(from: Path, name: String, scope: DependencyScope): IO[Unit] =
+    ProjectConfig.locate(from).flatMap(ProjectConfigEditor.remove(_, name, scope))
+
   private def load(from: Path): IO[Project] = ProjectConfig.locate(from).flatMap(ProjectConfig.load)
 
   private def compiler(project: Project): ScalaCompiler[IO] =
@@ -98,3 +116,5 @@ final class BuildService:
       try stream.sorted(java.util.Comparator.reverseOrder()).forEach(Files.delete)
       finally stream.close()
   }
+
+final case class AddedDependency(name: String, dependency: Dependency, artifactCount: Int)

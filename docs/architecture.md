@@ -15,7 +15,8 @@ cli ─────> config ──> core <── dependencies
 
 - `core` owns immutable domain values, errors, project layout, source discovery, hashing, and cache
   contracts. It has no knowledge of TOML, terminals, or CLI parsing.
-- `config` parses `sprout.toml` into the core model. Configuration is data only.
+- `config` parses `sprout.toml` into the core model and performs narrow, atomic dependency edits.
+  Configuration remains data only; edits never execute project code or rewrite unrelated sections.
 - `dependencies` implements the resolver boundary with Coursier and retains resolved artifacts as a
   model that can later expose dependency provenance to `graph` and `why`.
 - `compiler` owns compilation requests and the compiler boundary. The first backend starts Dotty in

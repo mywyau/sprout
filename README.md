@@ -140,6 +140,19 @@ artifacts and unchanged classes. Also introduce a deliberate type error and conf
 the compiler's file and line information without printing an internal stack trace. Use `--debug` to
 verify that deeper diagnostics remain available when requested.
 
+Add dependencies without editing TOML by hand:
+
+```bash
+sprout add org.typelevel::cats-effect:3.6.3
+sprout remove cats-effect
+sprout remove --test munit
+sprout add --test org.scalameta::munit:1.1.1
+```
+
+`add` accepts ordinary Maven coordinates and Scala-aware `organisation::artifact:version`
+coordinates. Sprout resolves an addition before atomically updating `sprout.toml`, so an unavailable
+version leaves the configuration unchanged. Dependency names default to the artifact name.
+
 ## Configuration
 
 Sprout projects use declarative TOML and never execute build code:
@@ -177,6 +190,8 @@ src/test/scala       src/test/resources
 | `sprout run [ARGS]` | Compile, detect one main class, and run it |
 | `sprout test` | Compile and run MUnit suites |
 | `sprout clean` | Delete project-local `.sprout/` state |
+| `sprout add [--test] COORDINATE` | Resolve and add a main or test dependency |
+| `sprout remove [--test] NAME` | Remove a main or test dependency |
 | `sprout setup-ide` | Install the BSP connection used by Metals-compatible editors |
 
 Pass `--debug` with a command to include stack traces for unexpected failures. Normal configuration,

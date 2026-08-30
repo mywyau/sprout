@@ -50,6 +50,16 @@ object Main extends IOApp:
           .flatMap(result => IO.println(s"\n✓ ${result.total} test(s) passed"))
       case CliCommand.Clean =>
         service.clean(Path.of(".")).flatMap(_ => IO.println("✓ Cleaned .sprout"))
+      case CliCommand.Add(coordinate, scope) =>
+        service.add(Path.of("."), coordinate, scope).flatMap { added =>
+          IO.println(
+            s"Added ${added.name}\n\n${added.dependency.display}\nResolved ${added.artifactCount} artifact(s)\nUpdated sprout.toml"
+          )
+        }
+      case CliCommand.Remove(name, scope) =>
+        service
+          .remove(Path.of("."), name, scope)
+          .flatMap(_ => IO.println(s"Removed $name\n\nUpdated sprout.toml"))
       case CliCommand.SetupIde =>
         for
           config <- sprout.config.ProjectConfig.locate(Path.of("."))
@@ -78,6 +88,10 @@ object Main extends IOApp:
        |  run [ARGS] Compile and run the application
        |  test       Compile and run MUnit tests
        |  clean      Delete project-local build state
+       |  add [--test] COORDINATE
+       |              Add and resolve a dependency
+       |  remove [--test] NAME
+       |              Remove a dependency from sprout.toml
        |  setup-ide  Configure Metals and other BSP-compatible editors
        |
        |Options:

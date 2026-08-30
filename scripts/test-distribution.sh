@@ -34,6 +34,12 @@ mkdir -p "$TEMPORARY_ROOT/projects"
   "$INSTALLED_SPROUT" setup-ide >/dev/null
   grep -F "\"$INSTALLED_SPROUT\"" .bsp/sprout.json >/dev/null
   ruby "$REPOSITORY_ROOT/scripts/test-bsp.rb" "$INSTALLED_SPROUT" "$PWD" >/dev/null
+  "$INSTALLED_SPROUT" add org.typelevel::cats-effect:3.6.3 | grep -F "Added cats-effect" >/dev/null
+  grep -F 'cats-effect = "org.typelevel::cats-effect:3.6.3"' sprout.toml >/dev/null
+  "$INSTALLED_SPROUT" remove cats-effect | grep -F "Removed cats-effect" >/dev/null
+  ! grep -F 'cats-effect = ' sprout.toml >/dev/null
+  "$INSTALLED_SPROUT" remove --test munit >/dev/null
+  "$INSTALLED_SPROUT" add --test org.scalameta::munit:1.1.1 | grep -F "Added munit" >/dev/null
   "$INSTALLED_SPROUT" run | grep -F "Hello from Sprout!" >/dev/null
   "$INSTALLED_SPROUT" test | grep -F "1 test(s) passed" >/dev/null
   "$INSTALLED_SPROUT" clean >/dev/null

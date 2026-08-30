@@ -1,7 +1,7 @@
 package sprout.cli
 
 import cats.effect.unsafe.implicits.global
-import sprout.core.{CompilationResult, SproutError}
+import sprout.core.{CompilationResult, DependencyScope, SproutError}
 import java.nio.file.{Files, Path, StandardCopyOption}
 import scala.jdk.CollectionConverters.*
 
@@ -36,6 +36,55 @@ class BuildIntegrationSuite extends munit.FunSuite:
     val result = service.test(project).unsafeRunSync()
     assertEquals(result.failed, 0)
     assertEquals(result.total, 1)
+  }
+
+  test("adds, resolves, and removes main and test dependencies") {
+    val project = copyFixture("hello-world")
+
+    val cats = service
+      .add(project, "org.typelevel::cats-effect:3.6.3", DependencyScope.Main)
+      .unsafeRunSync()
+    val munit = service
+      .add(project, "org.scalameta::munit:1.1.1", DependencyScope.Test)
+      .unsafeRunSync()
+
+    assertEquals(cats.name, "cats-effect")
+    assert(cats.artifactCount > 0)
+    assertEquals(munit.name, "munit")
+    val configured = sprout.config.ProjectConfig
+      .load(project.resolve("sprout.toml"))
+      .unsafeRunSync()
+    assertEquals(configured.mainDependencies.map(_.display), List(cats.dependency.display))
+    assertEquals(
+      configured.dependencies.filter(_.scope == DependencyScope.Test).map(_.display),
+      List(munit.dependency.display)
+    )
+
+    service.remove(project, "cats-effect", DependencyScope.Main).unsafeRunSync()
+    service.remove(project, "munit", DependencyScope.Test).unsafeRunSync()
+
+    assertEquals(
+      sprout.config.ProjectConfig.load(project.resolve("sprout.toml")).unsafeRunSync().dependencies,
+      Nil
+    )
+  }
+
+  test("does not update configuration when an added dependency cannot resolve") {
+    val project = copyFixture("hello-world")
+    val config = project.resolve("sprout.toml")
+    val original = Files.readString(config)
+
+    intercept[SproutError.Resolution](
+      service
+        .add(
+          project,
+          "org.typelevel::cats-effect:0.0.0-sprout-missing",
+          DependencyScope.Main
+        )
+        .unsafeRunSync()
+    )
+
+    assertEquals(Files.readString(config), original)
   }
 
   private def copyFixture(name: String): Path =
