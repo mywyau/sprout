@@ -24,11 +24,9 @@ final class BuildService(
   def run(from: Path, arguments: List[String]): IO[Unit] =
     for
       session <- mainSession(from)
-      _ <- compileMain(session).flatMap(reportCompilation)
-      mainClass <- MainClassDiscovery.discover(
-        session.project.layout.mainClasses,
-        session.mainRuntimeClasspath
-      )
+      request <- mainCompilationRequest(session)
+      _ <- compileMain(session, request).flatMap(reportCompilation)
+      mainClass <- cachedMainClass(session, request)
       exit <- applicationRunner.run(mainClass, session.mainRuntimeClasspath, arguments)
       _ <- IO.raiseWhen(exit != 0)(SproutError.Process("Application", exit))
     yield ()
@@ -73,11 +71,9 @@ final class BuildService(
   def packageApplication(from: Path): IO[ApplicationPackageResult] =
     for
       session <- mainSession(from)
-      _ <- compileMain(session).flatMap(reportCompilation)
-      mainClass <- MainClassDiscovery.discover(
-        session.project.layout.mainClasses,
-        session.mainRuntimeClasspath
-      )
+      request <- mainCompilationRequest(session)
+      _ <- compileMain(session, request).flatMap(reportCompilation)
+      mainClass <- cachedMainClass(session, request)
       result <- applicationPackager.create(
         ApplicationPackageRequest(
           session.project.name.value,
@@ -132,58 +128,96 @@ final class BuildService(
   private def resolvedMainDependencies(from: Path): IO[(Project, ResolvedDependencies)] =
     for
       project <- load(from)
-      dependencies <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
+      cached <- metadata(project).dependencies(project.scalaVersion, project.mainDependencies)(
+        resolver.resolve(project.scalaVersion, project.mainDependencies)
+      )
+      _ <- reportResolution(cached.cached)
+      dependencies = cached.value
     yield (project, dependencies)
 
   private def mainSession(from: Path): IO[BuildSession] =
     load(from).flatMap { project =>
-      resolving(
+      val cache = metadata(project)
+      (
+        cache.dependencies(project.scalaVersion, project.mainDependencies)(
+          resolver.resolve(project.scalaVersion, project.mainDependencies)
+        ),
+        cache.compilerClasspath(project.scalaVersion)(
+          resolver.compilerClasspath(project.scalaVersion)
+        ),
+        cache.compilerBridge(project.scalaVersion)(resolver.compilerBridge(project.scalaVersion))
+      ).parMapN { (dependencies, compiler, bridge) =>
         (
-          resolver.resolve(project.scalaVersion, project.mainDependencies),
-          resolver.compilerClasspath(project.scalaVersion),
-          resolver.compilerBridge(project.scalaVersion)
-        ).parMapN((dependencies, compiler, bridge) =>
-          BuildSession.main(project, dependencies, compiler, bridge)
+          BuildSession.main(project, dependencies.value, compiler.value, bridge.value),
+          List(dependencies.cached, compiler.cached, bridge.cached).forall(identity)
         )
-      )
+      }.flatTap { case (_, cached) => reportResolution(cached) }
+        .map(_._1)
     }
 
   private def sessionWithTests(from: Path): IO[BuildSession] =
     load(from).flatMap { project =>
-      resolving(
+      val cache = metadata(project)
+      (
+        cache.dependencies(project.scalaVersion, project.mainDependencies)(
+          resolver.resolve(project.scalaVersion, project.mainDependencies)
+        ),
+        cache.dependencies(project.scalaVersion, project.testDependencies)(
+          resolver.resolve(project.scalaVersion, project.testDependencies)
+        ),
+        cache.compilerClasspath(project.scalaVersion)(
+          resolver.compilerClasspath(project.scalaVersion)
+        ),
+        cache.compilerBridge(project.scalaVersion)(resolver.compilerBridge(project.scalaVersion))
+      ).parMapN { (main, test, compiler, bridge) =>
         (
-          resolver.resolve(project.scalaVersion, project.mainDependencies),
-          resolver.resolve(project.scalaVersion, project.testDependencies),
-          resolver.compilerClasspath(project.scalaVersion),
-          resolver.compilerBridge(project.scalaVersion)
-        ).parMapN((main, test, compiler, bridge) =>
-          BuildSession.withTests(project, main, test, compiler, bridge)
+          BuildSession.withTests(project, main.value, test.value, compiler.value, bridge.value),
+          List(main.cached, test.cached, compiler.cached, bridge.cached).forall(identity)
         )
-      )
+      }.flatTap { case (_, cached) => reportResolution(cached) }
+        .map(_._1)
     }
 
   private def compileMain(session: BuildSession): IO[CompilationResult] =
+    mainCompilationRequest(session).flatMap(compileMain(session, _))
+
+  private def mainCompilationRequest(session: BuildSession): IO[CompilationRequest] =
     for
       sources <- SourceDiscovery.scalaSources(session.project.layout.mainSources)
       _ <- IO.raiseWhen(sources.isEmpty)(
         SproutError.User("No Scala sources found under src/main/scala")
       )
-      result <- compiler(session.project, "compile").compile(
-        CompilationRequest(
-          sources,
-          session.mainCompileClasspath,
-          session.compilerClasspath.paths,
-          session.project.layout.mainClasses,
-          session.project.scalaVersion,
-          incremental = Some(
-            IncrementalCompilation(
-              session.compilerBridge,
-              session.project.layout.zincDirectory("compile")
-            )
-          )
+    yield CompilationRequest(
+      sources,
+      session.mainCompileClasspath,
+      session.compilerClasspath.paths,
+      session.project.layout.mainClasses,
+      session.project.scalaVersion,
+      incremental = Some(
+        IncrementalCompilation(
+          session.compilerBridge,
+          session.project.layout.zincDirectory("compile")
         )
       )
-    yield result
+    )
+
+  private def compileMain(
+      session: BuildSession,
+      request: CompilationRequest
+  ): IO[CompilationResult] =
+    compiler(session.project, "compile").compile(request)
+
+  private def cachedMainClass(session: BuildSession, request: CompilationRequest): IO[String] =
+    Hashing.compilationKey(request).flatMap { key =>
+      metadata(session.project)
+        .mainClass(key, session.project.layout.mainClasses)(
+          MainClassDiscovery.discover(
+            session.project.layout.mainClasses,
+            session.mainRuntimeClasspath
+          )
+        )
+        .map(_.value)
+    }
 
   private def compiler(project: Project, cacheName: String): ScalaCompiler[IO] =
     CachingScalaCompiler(
@@ -219,6 +253,12 @@ final class BuildService(
 
   private def resolving[A](action: IO[A]): IO[A] =
     IO.println("Resolving dependencies...") *> action
+
+  private def metadata(project: Project): BuildMetadataCache =
+    BuildMetadataCache(project.layout.metadataDirectory)
+
+  private def reportResolution(cached: Boolean): IO[Unit] =
+    IO.println(if cached then "Dependencies cached" else "Resolving dependencies...")
 
   private def reportCompilation(result: CompilationResult): IO[Unit] = result match
     case CompilationResult.Compiled(count) => IO.println(s"Compiled $count Scala source(s)")

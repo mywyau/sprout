@@ -21,6 +21,27 @@ class BuildIntegrationSuite extends munit.FunSuite:
     assertEquals(service.compile(project).unsafeRunSync(), CompilationResult.UpToDate)
   }
 
+  test("reuses persisted build session metadata across commands") {
+    val project = copyFixture("hello-world")
+    val resolver = CountingResolver()
+
+    assert(
+      BuildService(resolver = resolver)
+        .compile(project)
+        .unsafeRunSync()
+        .isInstanceOf[CompilationResult.Compiled]
+    )
+    assertEquals(
+      BuildService(resolver = resolver).compile(project).unsafeRunSync(),
+      CompilationResult.UpToDate
+    )
+
+    assertEquals(resolver.resolutions.size(), 1)
+    assertEquals(resolver.compilerClasspathInvocations.get(), 1)
+    assertEquals(resolver.compilerBridgeInvocations.get(), 1)
+    assert(Files.isDirectory(project.resolve(".sprout/metadata/build-session")))
+  }
+
   test("Zinc recompiles a changed source without rebuilding unrelated sources") {
     val project = copyFixture("incremental-app")
     val first = service.compile(project).unsafeRunSync()
@@ -228,6 +249,7 @@ class BuildIntegrationSuite extends munit.FunSuite:
       extends DependencyResolver[IO]:
     val resolutions = new ConcurrentLinkedQueue[List[Dependency]]()
     val compilerClasspathInvocations = AtomicInteger()
+    val compilerBridgeInvocations = AtomicInteger()
 
     def resolve(
         scalaVersion: ScalaVersion,
@@ -241,7 +263,9 @@ class BuildIntegrationSuite extends munit.FunSuite:
       )
 
     def compilerBridge(scalaVersion: ScalaVersion): IO[Path] =
-      delegate.compilerBridge(scalaVersion)
+      IO(compilerBridgeInvocations.incrementAndGet()).flatMap(_ =>
+        delegate.compilerBridge(scalaVersion)
+      )
 
   private object CountingResolver:
     def apply(): CountingResolver = new CountingResolver(CoursierDependencyResolver())

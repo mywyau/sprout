@@ -7,6 +7,9 @@ Performance is a product constraint, but correctness defines whether cached work
 - Coursier owns the global download cache and concurrent artifact fetching.
 - Each CLI command creates one immutable build session containing the project, resolved main and
   optional test dependencies, compiler classpath, and derived compile/runtime classpaths.
+- Versioned build-session metadata persists resolved dependency graphs, compiler artifacts, compiler
+  bridges, and detected main classes. It is reused only when its declared inputs still match and all
+  referenced artifacts remain present; corrupt or obsolete entries are resolved again safely.
 - Compilation outputs and metadata live below `.sprout/`.
 - The compile key includes ordered source and classpath contents, the compiler artifact contents,
   compiler bridge contents, exact Scala version, compiler options, and current JVM target.

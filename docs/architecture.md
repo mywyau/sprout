@@ -48,6 +48,9 @@ short-lived; it is not global mutable state or a daemon cache.
 ## Local state and caching
 
 Project outputs live below `.sprout/`: main classes, test classes, metadata, and application packages.
+The metadata directory also contains the versioned build-session cache: resolved dependency graphs,
+compiler artifacts, compiler bridges, and main-class selections. It is an optimisation boundary only;
+missing or malformed metadata causes normal resolution or discovery rather than a build failure.
 Dependencies use Coursier's established global artifact cache during builds and are copied into an
 application distribution only by `sprout package`. Compilation metadata is keyed from source
 contents, compiler version and options, JVM target, and ordered resolved classpath content. An output
