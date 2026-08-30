@@ -6,6 +6,7 @@ ThisBuild / Test / fork := true
 
 lazy val catsEffect = "org.typelevel" %% "cats-effect" % "3.6.3"
 lazy val munit = "org.scalameta" %% "munit" % "1.1.1" % Test
+lazy val zincVersion = "1.12.1"
 
 lazy val core = project
   .in(file("modules/core"))
@@ -34,7 +35,15 @@ lazy val dependencies = project
 lazy val compiler = project
   .in(file("modules/compiler"))
   .dependsOn(core)
-  .settings(name := "sprout-compiler", libraryDependencies ++= Seq(catsEffect, munit))
+  .settings(
+    name := "sprout-compiler",
+    libraryDependencies ++= Seq(
+      ("org.scala-sbt" % "zinc_2.13" % zincVersion).exclude("org.jline", "jline"),
+      "org.scala-sbt" % "compiler-interface" % zincVersion,
+      catsEffect,
+      munit
+    )
+  )
 
 lazy val runner = project
   .in(file("modules/runner"))

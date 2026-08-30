@@ -4,7 +4,7 @@ import cats.effect.IO
 import cats.syntax.all.*
 import sprout.core.*
 import sprout.config.{ProjectConfig, ProjectConfigEditor}
-import sprout.compiler.{CachingScalaCompiler, FileCache, ProcessScalaCompiler}
+import sprout.compiler.{CachingScalaCompiler, FileCache, ZincScalaCompiler}
 import sprout.dependencies.CoursierDependencyResolver
 import sprout.packager.{ApplicationPackageRequest, ApplicationPackager, ApplicationPackageResult}
 import sprout.runner.{JvmApplicationRunner, MainClassDiscovery, MUnitTestRunner}
@@ -12,7 +12,7 @@ import java.nio.file.{Files, Path}
 
 final class BuildService(
     resolver: DependencyResolver[IO] = CoursierDependencyResolver(),
-    processCompiler: ScalaCompiler[IO] = ProcessScalaCompiler(),
+    scalaCompiler: ScalaCompiler[IO] = ZincScalaCompiler(),
     applicationRunner: ApplicationRunner[IO] = JvmApplicationRunner(),
     testRunner: TestRunner[IO] = MUnitTestRunner()
 ):
@@ -51,7 +51,13 @@ final class BuildService(
             testBuild.compileClasspath,
             session.compilerClasspath.paths,
             session.project.layout.testClasses,
-            session.project.scalaVersion
+            session.project.scalaVersion,
+            incremental = Some(
+              IncrementalCompilation(
+                session.compilerBridge,
+                session.project.layout.zincDirectory("test-compile")
+              )
+            )
           )
         )
         .flatMap(reportCompilation)
@@ -132,8 +138,11 @@ final class BuildService(
       resolving(
         (
           resolver.resolve(project.scalaVersion, project.mainDependencies),
-          resolver.compilerClasspath(project.scalaVersion)
-        ).parMapN((dependencies, compiler) => BuildSession.main(project, dependencies, compiler))
+          resolver.compilerClasspath(project.scalaVersion),
+          resolver.compilerBridge(project.scalaVersion)
+        ).parMapN((dependencies, compiler, bridge) =>
+          BuildSession.main(project, dependencies, compiler, bridge)
+        )
       )
     }
 
@@ -143,8 +152,11 @@ final class BuildService(
         (
           resolver.resolve(project.scalaVersion, project.mainDependencies),
           resolver.resolve(project.scalaVersion, project.testDependencies),
-          resolver.compilerClasspath(project.scalaVersion)
-        ).parMapN((main, test, compiler) => BuildSession.withTests(project, main, test, compiler))
+          resolver.compilerClasspath(project.scalaVersion),
+          resolver.compilerBridge(project.scalaVersion)
+        ).parMapN((main, test, compiler, bridge) =>
+          BuildSession.withTests(project, main, test, compiler, bridge)
+        )
       )
     }
 
@@ -160,14 +172,20 @@ final class BuildService(
           session.mainCompileClasspath,
           session.compilerClasspath.paths,
           session.project.layout.mainClasses,
-          session.project.scalaVersion
+          session.project.scalaVersion,
+          incremental = Some(
+            IncrementalCompilation(
+              session.compilerBridge,
+              session.project.layout.zincDirectory("compile")
+            )
+          )
         )
       )
     yield result
 
   private def compiler(project: Project, cacheName: String): ScalaCompiler[IO] =
     CachingScalaCompiler(
-      processCompiler,
+      scalaCompiler,
       FileCache(project.layout.metadataDirectory.resolve(cacheName))
     )
 

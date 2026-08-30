@@ -57,11 +57,9 @@ final class CachingScalaCompiler(delegate: ScalaCompiler[IO], cache: Cache[IO])
         if cached.exists(value => output.contains(value.value)) then
           IO.pure(CompilationResult.UpToDate)
         else
-          delegate.compile(request).flatTap {
-            case CompilationResult.Compiled(_) =>
-              Hashing
-                .outputFingerprint(request.outputDirectory)
-                .flatMap(_.fold(IO.unit)(value => cache.put(key, CachedValue(value))))
-            case CompilationResult.UpToDate => IO.unit
+          delegate.compile(request).flatTap { _ =>
+            Hashing
+              .outputFingerprint(request.outputDirectory)
+              .flatMap(_.fold(IO.unit)(value => cache.put(key, CachedValue(value))))
           }
     yield result

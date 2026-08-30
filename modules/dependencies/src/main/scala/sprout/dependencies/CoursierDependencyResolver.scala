@@ -30,6 +30,18 @@ final class CoursierDependencyResolver extends DependencyResolver[IO]:
       .fold(message => throw IllegalArgumentException(message), identity)
     fetch(scalaVersion, List(compiler), Nil).map(_.classpath)
 
+  def compilerBridge(scalaVersion: ScalaVersion): IO[java.nio.file.Path] =
+    val bridge = Dependency
+      .parse(s"org.scala-lang:scala3-sbt-bridge:${scalaVersion.value}", DependencyScope.Main)
+      .fold(message => throw IllegalArgumentException(message), identity)
+    fetch(scalaVersion, List(bridge), Nil).flatMap { result =>
+      IO.fromOption(
+        result.classpath.paths.find(_.getFileName.toString.startsWith("scala3-sbt-bridge-"))
+      )(
+        SproutError.User(s"Scala ${scalaVersion.value} compiler bridge was not downloaded")
+      )
+    }
+
   def resolveSources(
       scalaVersion: ScalaVersion,
       dependencies: List[Dependency]

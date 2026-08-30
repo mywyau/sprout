@@ -35,6 +35,19 @@ class HashingSuite extends munit.FunSuite:
     assertNotEquals(original, changedCompiler)
   }
 
+  test("compilation fingerprints include the Zinc compiler bridge contents") {
+    val fixture = requestFixture()
+    val bridge = Files.writeString(fixture.root.resolve("compiler-bridge.jar"), "bridge")
+    val request = fixture.request.copy(
+      incremental = Some(IncrementalCompilation(bridge, fixture.root.resolve("analysis")))
+    )
+    val original = Hashing.compilationKey(request).unsafeRunSync()
+
+    Files.writeString(bridge, "changed bridge")
+
+    assertNotEquals(original, Hashing.compilationKey(request).unsafeRunSync())
+  }
+
   test(
     "compilation fingerprints include Scala version, options, JVM target, and class directories"
   ) {

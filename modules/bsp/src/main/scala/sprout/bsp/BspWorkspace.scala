@@ -2,7 +2,7 @@ package sprout.bsp
 
 import cats.effect.IO
 import cats.syntax.all.*
-import sprout.compiler.{CachingScalaCompiler, FileCache, ProcessScalaCompiler}
+import sprout.compiler.{CachingScalaCompiler, FileCache, ZincScalaCompiler}
 import sprout.config.ProjectConfig
 import sprout.core.*
 import sprout.dependencies.CoursierDependencyResolver
@@ -15,7 +15,8 @@ private[bsp] final case class TargetClasspath(
     project: Project,
     kind: TargetKind,
     dependencies: List[Path],
-    compiler: List[Path]
+    compiler: List[Path],
+    compilerBridge: Path
 ):
   def outputDirectory: Path = kind match
     case TargetKind.Main => project.layout.mainClasses
@@ -27,7 +28,7 @@ private[bsp] final case class TargetClasspath(
 
 private[bsp] final class BspWorkspace(root: Path):
   private val resolver = CoursierDependencyResolver()
-  private val processCompiler = ProcessScalaCompiler(captureOutput = true)
+  private val scalaCompiler = ZincScalaCompiler(captureOutput = true)
 
   def project: IO[Project] = ProjectConfig.locate(root).flatMap(ProjectConfig.load)
 
@@ -37,10 +38,11 @@ private[bsp] final class BspWorkspace(root: Path):
       case TargetKind.Test => value.testDependencies
     (
       resolver.resolve(value.scalaVersion, dependencies),
-      resolver.compilerClasspath(value.scalaVersion)
+      resolver.compilerClasspath(value.scalaVersion),
+      resolver.compilerBridge(value.scalaVersion)
     )
-      .parMapN((resolved, compiler) =>
-        TargetClasspath(value, kind, resolved.classpath.paths, compiler.paths)
+      .parMapN((resolved, compiler, bridge) =>
+        TargetClasspath(value, kind, resolved.classpath.paths, compiler.paths, bridge)
       )
   }
 
@@ -65,7 +67,15 @@ private[bsp] final class BspWorkspace(root: Path):
             target.compiler,
             target.outputDirectory,
             target.project.scalaVersion,
-            semanticdbOptions(target.project)
+            semanticdbOptions(target.project),
+            incremental = Some(
+              IncrementalCompilation(
+                target.compilerBridge,
+                target.project.layout.zincDirectory(
+                  if kind == TargetKind.Main then "compile" else "test-compile"
+                )
+              )
+            )
           )
         )
     }
@@ -90,7 +100,7 @@ private[bsp] final class BspWorkspace(root: Path):
   private def compiler(project: Project, kind: TargetKind): ScalaCompiler[IO] =
     val cacheName = if kind == TargetKind.Main then "compile" else "test-compile"
     CachingScalaCompiler(
-      processCompiler,
+      scalaCompiler,
       FileCache(project.layout.metadataDirectory.resolve(cacheName))
     )
 

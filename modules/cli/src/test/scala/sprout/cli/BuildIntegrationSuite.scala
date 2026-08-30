@@ -5,6 +5,7 @@ import cats.effect.unsafe.implicits.global
 import sprout.core.*
 import sprout.dependencies.CoursierDependencyResolver
 import java.nio.file.{Files, Path, StandardCopyOption}
+import java.nio.file.attribute.FileTime
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters.*
@@ -18,6 +19,58 @@ class BuildIntegrationSuite extends munit.FunSuite:
     assert(first.isInstanceOf[CompilationResult.Compiled])
     assert(Files.isRegularFile(project.resolve(".sprout/classes/Main.class")))
     assertEquals(service.compile(project).unsafeRunSync(), CompilationResult.UpToDate)
+  }
+
+  test("Zinc recompiles a changed source without rebuilding unrelated sources") {
+    val project = copyFixture("incremental-app")
+    val first = service.compile(project).unsafeRunSync()
+    assertEquals(first, CompilationResult.Compiled(3))
+
+    val unrelatedClass = project.resolve(".sprout/classes/Unrelated$.class")
+    val preservedTimestamp = FileTime.fromMillis(1234567890000L)
+    Files.setLastModifiedTime(unrelatedClass, preservedTimestamp)
+    Files.writeString(
+      project.resolve("src/main/scala/Greeting.scala"),
+      """object Greeting:
+        |  def message: String = "Hello after a small change"
+        |""".stripMargin
+    )
+
+    assertEquals(service.compile(project).unsafeRunSync(), CompilationResult.Compiled(1))
+    assertEquals(Files.getLastModifiedTime(unrelatedClass), preservedTimestamp)
+
+    Files.delete(project.resolve("src/main/scala/Unrelated.scala"))
+    service.compile(project).unsafeRunSync()
+    assert(!Files.exists(unrelatedClass), "Zinc should remove products for deleted sources")
+  }
+
+  test("recovers from corrupt Zinc analysis with a safe full compilation") {
+    val project = copyFixture("incremental-app")
+    service.compile(project).unsafeRunSync()
+    val analysis = project.resolve(".sprout/metadata/zinc/v1/compile/analysis.zip")
+    Files.writeString(analysis, "corrupt analysis")
+    Files.writeString(
+      project.resolve("src/main/scala/Greeting.scala"),
+      """object Greeting:
+        |  def message: String = "Recovered"
+        |""".stripMargin
+    )
+
+    assertEquals(service.compile(project).unsafeRunSync(), CompilationResult.Compiled(3))
+    assertEquals(Files.readAllBytes(analysis).take(2).toList, List[Byte](0x50, 0x4b))
+    val stream = Files.list(analysis.getParent)
+    try assert(!stream.iterator.asScala.exists(_.getFileName.toString.endsWith(".tmp")))
+    finally stream.close()
+
+    val analysisBeforeFailure = Files.readAllBytes(analysis).toList
+    Files.writeString(
+      project.resolve("src/main/scala/Greeting.scala"),
+      """object Greeting:
+        |  val message: Int = "broken"
+        |""".stripMargin
+    )
+    intercept[SproutError.Compilation](service.compile(project).unsafeRunSync())
+    assertEquals(Files.readAllBytes(analysis).toList, analysisBeforeFailure)
   }
 
   test("reports a real Scala compile failure") {
@@ -170,6 +223,9 @@ class BuildIntegrationSuite extends munit.FunSuite:
       IO(compilerClasspathInvocations.incrementAndGet()).flatMap(_ =>
         delegate.compilerClasspath(scalaVersion)
       )
+
+    def compilerBridge(scalaVersion: ScalaVersion): IO[Path] =
+      delegate.compilerBridge(scalaVersion)
 
   private object CountingResolver:
     def apply(): CountingResolver = new CountingResolver(CoursierDependencyResolver())

@@ -9,16 +9,18 @@ Performance is a product constraint, but correctness defines whether cached work
   optional test dependencies, compiler classpath, and derived compile/runtime classpaths.
 - Compilation outputs and metadata live below `.sprout/`.
 - The compile key includes ordered source and classpath contents, the compiler artifact contents,
-  exact Scala version, compiler options, and current JVM target.
+  compiler bridge contents, exact Scala version, compiler options, and current JVM target.
 - Cache metadata has an explicit format version and is replaced atomically. Corrupt or incompatible
   metadata is ignored and regenerated.
 - A compile is skipped only when both its input key and a content fingerprint of all compiled output
-  match. Missing or modified output forces compilation.
+  match. Missing or modified output invokes Zinc, which uses its persisted analysis to select the
+  affected sources or safely performs a full compilation when analysis is unavailable.
 - Timestamps are not treated as proof that source contents are unchanged.
 
-The current cache is deliberately conservative. Changing any source triggers a correct full
-compilation. Test output has a separate request and key. Zinc will eventually replace full recompiles
-with analysis-guided affected-source compilation.
+Main and test compilation have separate fingerprints and Zinc analysis stores. A source-only
+implementation change recompiles that source without rewriting unrelated class files; API changes
+can also recompile dependent sources. Dependency, compiler-option, Scala-version, and JVM-target
+changes invalidate the compatible setup conservatively.
 
 ## Measurements
 

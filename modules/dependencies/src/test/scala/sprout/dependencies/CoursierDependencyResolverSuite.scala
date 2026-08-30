@@ -2,6 +2,7 @@ package sprout.dependencies
 
 import cats.effect.unsafe.implicits.global
 import sprout.core.*
+import java.util.zip.ZipFile
 
 class CoursierDependencyResolverSuite extends munit.FunSuite:
   private val resolver = CoursierDependencyResolver()
@@ -36,6 +37,17 @@ class CoursierDependencyResolverSuite extends munit.FunSuite:
     assertEquals(catsCoreRoot.requestedVersion, "2.10.0")
     assertEquals(catsCoreRoot.selectedVersion, "2.11.0")
     assert(catsCoreRoot.evicted)
+  }
+
+  test("resolves the matching precompiled Scala 3 Zinc bridge") {
+    val bridge = resolver.compilerBridge(scalaVersion).unsafeRunSync()
+    val zip = ZipFile(bridge.toFile)
+    try
+      val service = zip.getEntry("META-INF/services/xsbti.compile.CompilerInterface2")
+      assert(service != null)
+      val contents = new String(zip.getInputStream(service).readAllBytes()).trim
+      assertEquals(contents, "dotty.tools.xsbt.CompilerBridge")
+    finally zip.close()
   }
 
   private def dependency(value: String): Dependency =

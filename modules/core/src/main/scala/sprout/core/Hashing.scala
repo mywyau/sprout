@@ -27,6 +27,10 @@ object Hashing:
     request.compilerClasspath.zipWithIndex.foreach { case (entry, index) =>
       fingerprint.addPath(s"compiler-classpath-$index", entry)
     }
+    request.incremental.foreach { incremental =>
+      fingerprint.add("incremental-analysis-format", "zinc-v1")
+      fingerprint.addPath("compiler-bridge", incremental.compilerBridge)
+    }
     CacheKey(fingerprint.result())
   }
 

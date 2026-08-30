@@ -109,6 +109,8 @@ final case class ProjectLayout(
   def cacheDirectory: Path = buildDirectory.resolve("cache")
   def metadataDirectory: Path = buildDirectory.resolve("metadata")
   def packageDirectory: Path = buildDirectory.resolve("package")
+  def zincDirectory(compilation: String): Path =
+    metadataDirectory.resolve("zinc").resolve("v1").resolve(compilation)
 
 object ProjectLayout:
   def conventional(root: Path): ProjectLayout = ProjectLayout(
@@ -214,6 +216,7 @@ final case class BuildSession(
     project: Project,
     mainDependencies: ResolvedDependencies,
     compilerClasspath: ResolvedClasspath,
+    compilerBridge: Path,
     mainCompileClasspath: List[Path],
     mainRuntimeClasspath: List[Path],
     test: Option[TestBuildSession]
@@ -223,12 +226,14 @@ object BuildSession:
   def main(
       project: Project,
       dependencies: ResolvedDependencies,
-      compilerClasspath: ResolvedClasspath
+      compilerClasspath: ResolvedClasspath,
+      compilerBridge: Path
   ): BuildSession =
     BuildSession(
       project,
       dependencies,
       compilerClasspath,
+      compilerBridge,
       dependencies.classpath.paths,
       project.layout.mainClasses ::
         (project.layout.mainResources ++ dependencies.classpath.paths),
@@ -239,9 +244,10 @@ object BuildSession:
       project: Project,
       mainDependencies: ResolvedDependencies,
       testDependencies: ResolvedDependencies,
-      compilerClasspath: ResolvedClasspath
+      compilerClasspath: ResolvedClasspath,
+      compilerBridge: Path
   ): BuildSession =
-    val main = BuildSession.main(project, mainDependencies, compilerClasspath)
+    val main = BuildSession.main(project, mainDependencies, compilerClasspath, compilerBridge)
     main.copy(
       test = Some(
         TestBuildSession(
@@ -267,8 +273,11 @@ final case class CompilationRequest(
     outputDirectory: Path,
     scalaVersion: ScalaVersion,
     compilerOptions: List[String] = Nil,
-    jvmTarget: JvmTarget = JvmTarget.current
+    jvmTarget: JvmTarget = JvmTarget.current,
+    incremental: Option[IncrementalCompilation] = None
 )
+
+final case class IncrementalCompilation(compilerBridge: Path, stateDirectory: Path)
 
 enum CompilationResult:
   case Compiled(sourceCount: Int)

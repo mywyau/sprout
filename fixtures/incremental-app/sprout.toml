@@ -1,0 +1,3 @@
+[project]
+name = "incremental-app"
+scala = "3.3.6"

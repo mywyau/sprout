@@ -21,8 +21,9 @@ cli ─────> config ──> core <── dependencies
 - `dependencies` implements the resolver boundary with Coursier and retains a resolved graph with
   selected versions, requested versions, parent relations, direct/transitive status, and artifact
   ownership. Compilation, `graph`, and `why` consume the same resolution result.
-- `compiler` owns compilation requests and the compiler boundary. The first backend starts Dotty in
-  an isolated JVM; callers do not depend on that choice.
+- `compiler` owns compilation requests and the compiler boundary. The default backend integrates
+  Zinc with the matching precompiled Scala 3 compiler bridge; the original isolated-process backend
+  remains available behind the same interface.
 - `runner` starts JVM applications and provides a test-framework boundary. MUnit is the first adapter.
 - `packager` creates deterministic application directories, JARs, launchers, archives, and checksums.
   It consumes compiled output and an ordered runtime classpath but knows nothing about CLI parsing or
@@ -38,7 +39,8 @@ interfaces.
 ## Build sessions
 
 Every build-oriented CLI invocation loads one immutable `BuildSession`. It retains the project,
-resolved main dependencies, optional resolved test dependencies, compiler classpath, and derived
+resolved main dependencies, optional resolved test dependencies, compiler classpath, compiler
+bridge, and derived
 compile/runtime classpaths for that command. `compile`, `run`, and `package` resolve the main graph
 once. `test` resolves the distinct main and combined test graphs once each. A session is intentionally
 short-lived; it is not global mutable state or a daemon cache.
@@ -52,16 +54,19 @@ contents, compiler version and options, JVM target, and ordered resolved classpa
 is reusable only when the input key and the content fingerprint of every generated file both match.
 
 Cache entries carry a metadata format version and use a temporary sibling plus atomic rename. Invalid
-versions and malformed files are cache misses rather than build failures. The same atomic metadata
-writer is the required boundary for Zinc analysis stores, so a cancelled or failed process cannot
-leave a partially written analysis file at its final path.
+versions and malformed files are cache misses rather than build failures. Zinc analysis is stored
+separately for main and test compilation below `.sprout/metadata/zinc/v1/`. Analysis updates are
+staged beside the destination and atomically renamed, so a cancelled or failed process cannot leave
+a partially written analysis file at its final path. Corrupt analysis is treated as absent and
+recovered with a safe full compilation.
 
 ## Zinc integration
 
-`ScalaCompiler` is the replaceable seam. A Zinc backend will consume the same compilation request plus
-an analysis store below `.sprout/metadata`, use Zinc analysis to select affected sources, compile them,
-and atomically update analysis. The CLI and project model do not assume whole-project compilation.
-Sprout will use Zinc rather than reproduce its dependency analysis.
+`ScalaCompiler` remains the replaceable seam. `ZincScalaCompiler` consumes the ordinary compilation
+request plus its versioned state location, uses Zinc analysis to select affected sources, and updates
+analysis only after successful compilation. Sprout resolves the official Scala 3 bridge matching the
+project's exact Scala version through Coursier. The CLI and project model do not assume whole-project
+compilation, and Sprout does not reproduce Zinc's dependency analysis.
 
 ## BSP and a future daemon
 

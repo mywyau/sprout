@@ -51,9 +51,16 @@ working ordinary Scala build before expanding the surface area.
 - Versioned, atomic, corruption-tolerant cache metadata
 - Cold, warm, no-change, and single-file-change benchmark baselines
 
+## v0.2.7
+
+- Zinc incremental compilation for Scala 3 main and test sources
+- Versioned, atomic, corruption-tolerant analysis stores
+- Matching Scala 3 compiler bridge resolution through Coursier
+- Single-source recompilation and recovery integration tests
+
 ## Next
 
-- Zinc incremental compilation
+- Incremental compile telemetry and larger-project benchmark tracking
 
 ## v0.3
 

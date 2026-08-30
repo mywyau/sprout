@@ -30,7 +30,7 @@ private[compiler] object AtomicFile:
       moveReplacing(temporary, destination)
     finally Files.deleteIfExists(temporary)
 
-  private def moveReplacing(source: Path, destination: Path): Unit =
+  def moveReplacing(source: Path, destination: Path): Unit =
     try
       Files.move(
         source,

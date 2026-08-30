@@ -247,8 +247,9 @@ sbt test
 sbt check
 ```
 
-Real integration fixtures cover a basic app, Coursier dependency resolution, a compiler error, and an
-MUnit project. CI additionally installs a packaged Sprout archive into a temporary location and
+Real integration fixtures cover a basic app, Coursier dependency resolution, Zinc single-source
+recompilation and corrupt-analysis recovery, a compiler error, and an MUnit project. CI additionally
+installs a packaged Sprout archive into a temporary location and
 exercises `new`, dependency editing and diagnostics, BSP setup and compilation, SemanticDB
 generation, `run`, `test`, application packaging, packaged execution, checksum verification, and
 `clean`.
@@ -311,9 +312,10 @@ See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md),
 
 ## Current limitations
 
-Compilation caching currently skips an unchanged compilation using content fingerprints for sources,
-ordered dependency and compiler classpaths, Scala version, compiler options, JVM target, and compiled
-output. It is not incremental within a changed compilation; Zinc is the planned backend for that.
+Compilation caching skips an unchanged compilation using content fingerprints for sources, ordered
+dependency and compiler classpaths, compiler bridge, Scala version, compiler options, JVM target, and
+compiled output. Changed builds use Zinc analysis to recompile affected sources. Analysis is
+versioned, written atomically, and safely rebuilt when missing or corrupt.
 Dependency diagnostics currently cover the main scope; test-scope graph queries are not yet exposed.
 BSP currently covers editor import, dependency sources, and compilation but not editor run, test, or
 debug requests. There is no lockfile, daemon, library publishing, container-image creation, or
