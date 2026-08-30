@@ -111,6 +111,8 @@ final case class ProjectLayout(
   def packageDirectory: Path = buildDirectory.resolve("package")
   def zincDirectory(compilation: String): Path =
     metadataDirectory.resolve("zinc").resolve("v1").resolve(compilation)
+  def resourceStateDirectory(compilation: String): Path =
+    metadataDirectory.resolve("resources").resolve("v1").resolve(compilation)
 
 object ProjectLayout:
   def conventional(root: Path): ProjectLayout = ProjectLayout(
@@ -235,8 +237,7 @@ object BuildSession:
       compilerClasspath,
       compilerBridge,
       dependencies.classpath.paths,
-      project.layout.mainClasses ::
-        (project.layout.mainResources ++ dependencies.classpath.paths),
+      project.layout.mainClasses :: dependencies.classpath.paths,
       None
     )
 
@@ -253,9 +254,7 @@ object BuildSession:
         TestBuildSession(
           testDependencies,
           project.layout.mainClasses :: testDependencies.classpath.paths,
-          project.layout.testClasses :: project.layout.mainClasses ::
-            (project.layout.testResources ++ project.layout.mainResources ++
-              testDependencies.classpath.paths)
+          project.layout.testClasses :: project.layout.mainClasses :: testDependencies.classpath.paths
         )
       )
     )
@@ -274,7 +273,9 @@ final case class CompilationRequest(
     scalaVersion: ScalaVersion,
     compilerOptions: List[String] = Nil,
     jvmTarget: JvmTarget = JvmTarget.current,
-    incremental: Option[IncrementalCompilation] = None
+    incremental: Option[IncrementalCompilation] = None,
+    resourceDirectories: List[Path] = Nil,
+    resourceStateDirectory: Option[Path] = None
 )
 
 final case class IncrementalCompilation(compilerBridge: Path, stateDirectory: Path)
@@ -282,3 +283,4 @@ final case class IncrementalCompilation(compilerBridge: Path, stateDirectory: Pa
 enum CompilationResult:
   case Compiled(sourceCount: Int)
   case UpToDate
+  case ResourcesUpdated(resourceCount: Int)

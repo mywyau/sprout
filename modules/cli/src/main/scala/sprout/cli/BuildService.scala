@@ -56,7 +56,10 @@ final class BuildService(
                 session.compilerBridge,
                 session.project.layout.zincDirectory("test-compile")
               )
-            )
+            ),
+            resourceDirectories = session.project.layout.testResources,
+            resourceStateDirectory =
+              Some(session.project.layout.resourceStateDirectory("test-compile"))
           )
         )
         .flatMap(reportCompilation)
@@ -80,7 +83,7 @@ final class BuildService(
           session.project.scalaVersion.value,
           mainClass,
           session.project.layout.mainClasses,
-          session.project.layout.mainResources,
+          Nil,
           session.mainDependencies.classpath.paths,
           session.project.layout.packageDirectory
         )
@@ -198,7 +201,9 @@ final class BuildService(
           session.compilerBridge,
           session.project.layout.zincDirectory("compile")
         )
-      )
+      ),
+      resourceDirectories = session.project.layout.mainResources,
+      resourceStateDirectory = Some(session.project.layout.resourceStateDirectory("compile"))
     )
 
   private def compileMain(
@@ -261,8 +266,9 @@ final class BuildService(
     IO.println(if cached then "Dependencies cached" else "Resolving dependencies...")
 
   private def reportCompilation(result: CompilationResult): IO[Unit] = result match
-    case CompilationResult.Compiled(count) => IO.println(s"Compiled $count Scala source(s)")
-    case CompilationResult.UpToDate        => IO.println("Sources unchanged")
+    case CompilationResult.Compiled(count)         => IO.println(s"Compiled $count Scala source(s)")
+    case CompilationResult.UpToDate                => IO.println("Sources unchanged")
+    case CompilationResult.ResourcesUpdated(count) => IO.println(s"Updated $count resource(s)")
 
   private def deleteTree(root: Path): IO[Unit] = IO.blocking {
     if Files.exists(root) then

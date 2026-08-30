@@ -222,6 +222,10 @@ src/main/scala       src/main/resources
 src/test/scala       src/test/resources
 ```
 
+Resources are copied into `.sprout/classes` and `.sprout/test-classes` with the compiled output.
+They are therefore available through the normal JVM classpath to `run` and `test`, and main resources
+are included in the application JAR produced by `sprout package`.
+
 ## Commands
 
 | Command | Behaviour |

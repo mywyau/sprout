@@ -31,6 +31,9 @@ object Hashing:
       fingerprint.add("incremental-analysis-format", "zinc-v1")
       fingerprint.addPath("compiler-bridge", incremental.compilerBridge)
     }
+    request.resourceDirectories.zipWithIndex.foreach { case (directory, index) =>
+      fingerprint.addPath(s"resource-directory-$index", directory)
+    }
     CacheKey(fingerprint.result())
   }
 

@@ -40,8 +40,9 @@ object Main extends IOApp:
           )
       case CliCommand.Compile =>
         service.compile(Path.of(".")).flatMap {
-          case CompilationResult.Compiled(_) => IO.println("\n✓ Build succeeded")
-          case CompilationResult.UpToDate    => IO.println("\n✓ Nothing to build")
+          case CompilationResult.Compiled(_)         => IO.println("\n✓ Build succeeded")
+          case CompilationResult.UpToDate            => IO.println("\n✓ Nothing to build")
+          case CompilationResult.ResourcesUpdated(_) => IO.println("\n✓ Resources updated")
         }
       case CliCommand.Run(arguments)  => service.run(Path.of("."), arguments)
       case CliCommand.Test(selection) =>

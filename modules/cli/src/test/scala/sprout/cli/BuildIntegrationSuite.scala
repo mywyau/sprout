@@ -6,6 +6,7 @@ import sprout.core.*
 import sprout.dependencies.CoursierDependencyResolver
 import java.nio.file.{Files, Path, StandardCopyOption}
 import java.nio.file.attribute.FileTime
+import java.util.jar.JarFile
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import scala.jdk.CollectionConverters.*
@@ -40,6 +41,50 @@ class BuildIntegrationSuite extends munit.FunSuite:
     assertEquals(resolver.compilerClasspathInvocations.get(), 1)
     assertEquals(resolver.compilerBridgeInvocations.get(), 1)
     assert(Files.isDirectory(project.resolve(".sprout/metadata/build-session")))
+  }
+
+  test("copies resources for run, test, package, and resource deletion") {
+    val project = copyFixture("resources-app")
+
+    service.run(project, Nil).unsafeRunSync()
+    assertEquals(
+      Files.readString(project.resolve(".sprout/classes/application.conf")).trim,
+      "message = resource copied by Sprout"
+    )
+    assertEquals(service.compile(project).unsafeRunSync(), CompilationResult.UpToDate)
+
+    assertEquals(service.test(project).unsafeRunSync(), TestResult(total = 1, failed = 0))
+    assertEquals(
+      Files.readString(project.resolve(".sprout/test-classes/test-fixture.txt")).trim,
+      "test fixture copied by Sprout"
+    )
+
+    Files.writeString(
+      project.resolve("src/main/resources/application.conf"),
+      "message = resource updated by Sprout\n"
+    )
+    assertEquals(service.compile(project).unsafeRunSync(), CompilationResult.ResourcesUpdated(1))
+    assertEquals(
+      Files.readString(project.resolve(".sprout/classes/application.conf")).trim,
+      "message = resource updated by Sprout"
+    )
+
+    val packaged = service.packageApplication(project).unsafeRunSync()
+    val jar = new JarFile(packaged.applicationDirectory.resolve("lib/resources-app.jar").toFile)
+    try assert(jar.getEntry("application.conf") != null)
+    finally jar.close()
+
+    Files.delete(project.resolve("src/main/resources/application.conf"))
+    assertEquals(service.compile(project).unsafeRunSync(), CompilationResult.ResourcesUpdated(1))
+    assert(!Files.exists(project.resolve(".sprout/classes/application.conf")))
+  }
+
+  test("rejects resources that collide with compiled class output") {
+    val project = copyFixture("hello-world")
+    val resources = Files.createDirectories(project.resolve("src/main/resources"))
+    Files.writeString(resources.resolve("Main.class"), "not a JVM class")
+
+    intercept[SproutError.User](service.compile(project).unsafeRunSync())
   }
 
   test("Zinc recompiles a changed source without rebuilding unrelated sources") {

@@ -57,6 +57,10 @@ private[bsp] final class BspWorkspace(root: Path):
     val sourceDirectories = kind match
       case TargetKind.Main => target.project.layout.mainSources
       case TargetKind.Test => target.project.layout.testSources
+    val resourceDirectories = kind match
+      case TargetKind.Main => target.project.layout.mainResources
+      case TargetKind.Test => target.project.layout.testResources
+    val compilationName = if kind == TargetKind.Main then "compile" else "test-compile"
     SourceDiscovery.scalaSources(sourceDirectories).flatMap { sources =>
       if sources.isEmpty then IO.pure(CompilationResult.UpToDate)
       else
@@ -71,11 +75,12 @@ private[bsp] final class BspWorkspace(root: Path):
             incremental = Some(
               IncrementalCompilation(
                 target.compilerBridge,
-                target.project.layout.zincDirectory(
-                  if kind == TargetKind.Main then "compile" else "test-compile"
-                )
+                target.project.layout.zincDirectory(compilationName)
               )
-            )
+            ),
+            resourceDirectories = resourceDirectories,
+            resourceStateDirectory =
+              Some(target.project.layout.resourceStateDirectory(compilationName))
           )
         )
     }

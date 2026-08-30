@@ -48,6 +48,9 @@ short-lived; it is not global mutable state or a daemon cache.
 ## Local state and caching
 
 Project outputs live below `.sprout/`: main classes, test classes, metadata, and application packages.
+Main and test resources are synchronised into their corresponding class directories after compilation.
+The synchroniser tracks its own versioned manifest, removes stale copied resources, and rejects a
+resource path that would overwrite compiled output.
 The metadata directory also contains the versioned build-session cache: resolved dependency graphs,
 compiler artifacts, compiler bridges, and main-class selections. It is an optimisation boundary only;
 missing or malformed metadata causes normal resolution or discovery rather than a build failure.
