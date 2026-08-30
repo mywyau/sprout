@@ -26,19 +26,33 @@ class CliSuite extends munit.FunSuite:
   test("parses an optional MUnit suite or source file") {
     assertEquals(
       Cli.parse(List("test")),
-      Right(CliInvocation(CliCommand.Test(None), false))
+      Right(CliInvocation(CliCommand.Test(None, verbose = false), false))
     )
     assertEquals(
       Cli.parse(List("test", "CalculatorSuite")),
-      Right(CliInvocation(CliCommand.Test(Some("CalculatorSuite")), false))
+      Right(CliInvocation(CliCommand.Test(Some("CalculatorSuite"), verbose = false), false))
     )
     assertEquals(
       Cli.parse(List("test", "src/test/scala/CalculatorSuite.scala")),
       Right(
-        CliInvocation(CliCommand.Test(Some("src/test/scala/CalculatorSuite.scala")), false)
+        CliInvocation(
+          CliCommand.Test(Some("src/test/scala/CalculatorSuite.scala"), verbose = false),
+          false
+        )
       )
     )
-    assertEquals(Cli.parse(List("test", "one", "two")), Left("Usage: sprout test [SUITE_OR_FILE]"))
+    assertEquals(
+      Cli.parse(List("test", "--verbose", "CalculatorSuite")),
+      Right(CliInvocation(CliCommand.Test(Some("CalculatorSuite"), verbose = true), false))
+    )
+    assertEquals(
+      Cli.parse(List("test", "CalculatorSuite", "--verbose")),
+      Right(CliInvocation(CliCommand.Test(Some("CalculatorSuite"), verbose = true), false))
+    )
+    assertEquals(
+      Cli.parse(List("test", "one", "two")),
+      Left("Usage: sprout test [--verbose] [SUITE_OR_FILE]")
+    )
   }
 
   test("parses dependency commands and test scope") {

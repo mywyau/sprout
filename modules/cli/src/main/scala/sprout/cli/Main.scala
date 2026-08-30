@@ -1,6 +1,6 @@
 package sprout.cli
 
-import cats.effect.{ExitCode, IO, IOApp}
+import cats.effect.{Clock, ExitCode, IO, IOApp}
 import sprout.core.{CompilationResult, SproutError}
 import sprout.bsp.{BspConnection, BspConnectionChange, BspServer}
 import java.nio.file.Path
@@ -39,18 +39,24 @@ object Main extends IOApp:
             IO.println(s"Created ${path.getFileName}\n\n  cd ${path.getFileName}\n  sprout run")
           )
       case CliCommand.Compile =>
-        service.compile(Path.of(".")).flatMap {
-          case CompilationResult.Compiled(_)         => IO.println("\n✓ Build succeeded")
-          case CompilationResult.UpToDate            => IO.println("\n✓ Nothing to build")
-          case CompilationResult.ResourcesUpdated(_) => IO.println("\n✓ Resources updated")
+        timed(service.compile(Path.of("."))) { (result, duration) =>
+          val summary = result match
+            case CompilationResult.Compiled(_)         => "✓ Build succeeded"
+            case CompilationResult.UpToDate            => "✓ Nothing to build"
+            case CompilationResult.ResourcesUpdated(_) => "✓ Resources updated"
+          IO.println(s"\n$summary in ${renderDuration(duration)}")
         }
-      case CliCommand.Run(arguments)  => service.run(Path.of("."), arguments)
-      case CliCommand.Test(selection) =>
-        service
-          .test(Path.of("."), selection)
-          .flatMap(result => IO.println(s"\n✓ ${result.total} test(s) passed"))
+      case CliCommand.Run(arguments) =>
+        timed(service.run(Path.of("."), arguments))((_, duration) =>
+          IO.println(s"\n✓ Run completed in ${renderDuration(duration)}")
+        )
+      case CliCommand.Test(selection, verbose) =>
+        IO.println("Running tests...") *> timed(service.test(Path.of("."), selection, verbose)) {
+          (result, duration) =>
+            IO.println(s"\n✓ ${result.total} test(s) passed in ${renderDuration(duration)}")
+        }
       case CliCommand.Package =>
-        service.packageApplication(Path.of(".")).flatMap { result =>
+        timed(service.packageApplication(Path.of("."))) { (result, duration) =>
           IO.println(
             s"""\n✓ Package created
                |
@@ -59,7 +65,8 @@ object Main extends IOApp:
                |ZIP           ${result.zipArchive}
                |Checksums     ${result.archiveChecksums}
                |Main class    ${result.mainClass}
-               |Dependencies  ${result.dependencyCount}""".stripMargin
+               |Dependencies  ${result.dependencyCount}
+               |Completed in  ${renderDuration(duration)}""".stripMargin
           )
         }
       case CliCommand.Clean =>
@@ -102,7 +109,7 @@ object Main extends IOApp:
        |  new NAME   Create a Scala project
        |  compile    Compile main sources
        |  run [ARGS] Compile and run the application
-       |  test [SUITE_OR_FILE]
+       |  test [--verbose] [SUITE_OR_FILE]
        |             Compile tests and run all or one MUnit suite
        |  package    Create a runnable application directory and archives
        |  clean      Delete project-local build state
@@ -119,3 +126,16 @@ object Main extends IOApp:
        |  --version      Show the Sprout version
        |  --debug        Include stack traces for errors
        |""".stripMargin
+
+  private def renderDuration(duration: scala.concurrent.duration.FiniteDuration): String =
+    f"${duration.toMillis / 1000.0}%.1fs"
+
+  private def timed[A](
+      action: IO[A]
+  )(render: (A, scala.concurrent.duration.FiniteDuration) => IO[Unit]): IO[Unit] =
+    for
+      started <- Clock[IO].monotonic
+      value <- action
+      completed <- Clock[IO].monotonic
+      _ <- render(value, completed - started)
+    yield ()

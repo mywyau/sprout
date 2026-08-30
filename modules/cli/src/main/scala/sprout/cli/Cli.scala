@@ -8,7 +8,7 @@ enum CliCommand:
   case New(name: String)
   case Compile
   case Run(arguments: List[String])
-  case Test(selection: Option[String])
+  case Test(selection: Option[String], verbose: Boolean)
   case Package
   case Clean
   case Add(coordinate: String, scope: DependencyScope)
@@ -30,13 +30,10 @@ object Cli:
       case "new" :: Nil                        => Left("Command 'new' requires a project name")
       case "compile" :: Nil                    => Right(CliInvocation(CliCommand.Compile, debug))
       case "run" :: tail                       => Right(CliInvocation(CliCommand.Run(tail), debug))
-      case "test" :: Nil                       => Right(CliInvocation(CliCommand.Test(None), debug))
-      case "test" :: selector :: Nil if !selector.startsWith("--") =>
-        Right(CliInvocation(CliCommand.Test(Some(selector)), debug))
-      case "test" :: _      => Left("Usage: sprout test [SUITE_OR_FILE]")
-      case "package" :: Nil => Right(CliInvocation(CliCommand.Package, debug))
-      case "package" :: _   => Left("Usage: sprout package")
-      case "clean" :: Nil   => Right(CliInvocation(CliCommand.Clean, debug))
+      case "test" :: tail                      => testCommand(tail, debug)
+      case "package" :: Nil                    => Right(CliInvocation(CliCommand.Package, debug))
+      case "package" :: _                      => Left("Usage: sprout package")
+      case "clean" :: Nil                      => Right(CliInvocation(CliCommand.Clean, debug))
       case "add" :: tail    => scopedArgument("add", tail, CliCommand.Add.apply, debug)
       case "remove" :: tail =>
         scopedArgument("remove", tail, CliCommand.Remove.apply, debug)
@@ -73,3 +70,15 @@ object Cli:
         Left(
           s"Usage: sprout $command [--test] ${if command == "add" then "COORDINATE" else "NAME"}"
         )
+
+  private def testCommand(
+      arguments: List[String],
+      debug: Boolean
+  ): Either[String, CliInvocation] =
+    val verbose = arguments.contains("--verbose")
+    val values = arguments.filterNot(_ == "--verbose")
+    values match
+      case Nil => Right(CliInvocation(CliCommand.Test(None, verbose), debug))
+      case selector :: Nil if !selector.startsWith("--") =>
+        Right(CliInvocation(CliCommand.Test(Some(selector), verbose), debug))
+      case _ => Left("Usage: sprout test [--verbose] [SUITE_OR_FILE]")

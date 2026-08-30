@@ -31,7 +31,8 @@ trait TestRunner[F[_]]:
   def run(
       classDirectories: List[Path],
       classpath: List[Path],
-      selection: TestSelection = TestSelection.All
+      selection: TestSelection = TestSelection.All,
+      output: TestOutput = TestOutput.Compact
   ): F[TestResult]
 
 final case class TestResult(total: Int, failed: Int)
@@ -39,3 +40,6 @@ final case class TestResult(total: Int, failed: Int)
 enum TestSelection:
   case All
   case Suite(name: String)
+
+enum TestOutput:
+  case Compact, Verbose

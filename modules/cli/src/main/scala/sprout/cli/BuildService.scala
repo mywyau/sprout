@@ -31,7 +31,11 @@ final class BuildService(
       _ <- IO.raiseWhen(exit != 0)(SproutError.Process("Application", exit))
     yield ()
 
-  def test(from: Path, selector: Option[String] = None): IO[TestResult] =
+  def test(
+      from: Path,
+      selector: Option[String] = None,
+      verbose: Boolean = false
+  ): IO[TestResult] =
     for
       session <- sessionWithTests(from)
       testBuild <- IO.fromOption(session.test)(
@@ -66,7 +70,8 @@ final class BuildService(
       result <- testRunner.run(
         List(session.project.layout.testClasses),
         testBuild.runtimeClasspath,
-        selection
+        selection,
+        if verbose then TestOutput.Verbose else TestOutput.Compact
       )
       _ <- IO.raiseWhen(result.failed > 0)(SproutError.User(s"${result.failed} test(s) failed"))
     yield result
