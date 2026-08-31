@@ -4,6 +4,11 @@ import java.nio.file.Path
 
 trait DependencyResolver[F[_]]:
   def resolve(scalaVersion: ScalaVersion, dependencies: List[Dependency]): F[ResolvedDependencies]
+  def resolveLocked(
+      scalaVersion: ScalaVersion,
+      dependencies: List[Dependency],
+      locked: List[LockedModule]
+  ): F[ResolvedDependencies] = resolve(scalaVersion, dependencies)
   def compilerClasspath(scalaVersion: ScalaVersion): F[ResolvedClasspath]
   def compilerBridge(scalaVersion: ScalaVersion): F[Path]
 

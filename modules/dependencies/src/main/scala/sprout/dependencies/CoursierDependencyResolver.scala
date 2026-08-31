@@ -24,6 +24,23 @@ final class CoursierDependencyResolver extends DependencyResolver[IO]:
       ResolvedDependencies(result.classpath, graph(result, dependencies, scalaVersion))
     }
 
+  override def resolveLocked(
+      scalaVersion: ScalaVersion,
+      dependencies: List[Dependency],
+      locked: List[LockedModule]
+  ): IO[ResolvedDependencies] =
+    val scalaLibrary = Dependency
+      .parse(s"org.scala-lang:scala3-library_3:${scalaVersion.value}", DependencyScope.Main)
+      .fold(message => throw IllegalArgumentException(message), identity)
+    val exact = (scalaLibrary :: locked.map { entry =>
+      Dependency
+        .parse(s"${entry.module.organisation}:${entry.module.name}:${entry.version}", DependencyScope.Main)
+        .fold(message => throw IllegalArgumentException(message), identity)
+    }).distinct
+    fetch(scalaVersion, exact, dependencies).map { result =>
+      ResolvedDependencies(result.classpath, graph(result, dependencies, scalaVersion))
+    }
+
   def compilerClasspath(scalaVersion: ScalaVersion): IO[ResolvedClasspath] =
     val compiler = Dependency
       .parse(s"org.scala-lang:scala3-compiler_3:${scalaVersion.value}", DependencyScope.Main)

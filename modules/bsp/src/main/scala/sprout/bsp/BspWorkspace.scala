@@ -36,8 +36,10 @@ private[bsp] final class BspWorkspace(root: Path):
     val dependencies = kind match
       case TargetKind.Main => value.mainDependencies
       case TargetKind.Test => value.testDependencies
-    Lockfile.require(value).flatTap(Lockfile.verifyInput(value, _)) *> (
-      resolver.resolve(value.scalaVersion, dependencies),
+    Lockfile.require(value).flatTap(Lockfile.verifyInput(value, _)).flatMap { lock =>
+      val locked = if kind == TargetKind.Main then Lockfile.mainModules(lock) else Lockfile.testModules(lock)
+      (
+      resolver.resolveLocked(value.scalaVersion, dependencies, locked),
       resolver.compilerClasspath(value.scalaVersion),
       resolver.compilerBridge(value.scalaVersion)
     )
@@ -50,6 +52,7 @@ private[bsp] final class BspWorkspace(root: Path):
            else Lockfile.verifyTest(value, resolved, lock)).as(target)
         }
       }
+    }
   }
 
   def dependencySources(kind: TargetKind): IO[List[Path]] = project.flatMap { value =>

@@ -142,6 +142,8 @@ final case class ResolvedModule(organisation: String, name: String):
   def id: String = s"$organisation:$name"
   def displayName: String = name.replaceFirst("_(?:2\\.\\d+|3)$", "")
 
+final case class LockedModule(module: ResolvedModule, version: String)
+
 final case class ResolvedDependency(
     module: ResolvedModule,
     version: String,

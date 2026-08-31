@@ -79,6 +79,9 @@ object Lockfile:
     if lock.input != input(project) then stale()
   }
 
+  def mainModules(lock: DependencyLock): List[LockedModule] = modules(lock.main)
+  def testModules(lock: DependencyLock): List[LockedModule] = modules(lock.test)
+
   private def stale(): Nothing =
     throw SproutError.User(
       "sprout.lock does not match the resolved dependencies; run 'sprout lock' to refresh it"
@@ -116,6 +119,21 @@ object Lockfile:
         s"relation\t${relation.parent.map(_.id).getOrElse("")}\t${relation.child.id}\t${relation.requestedVersion}\t${relation.selectedVersion}"
       )
     (modules ++ relations).mkString("\n")
+
+  private def modules(snapshot: String): List[LockedModule] =
+    snapshot.linesIterator
+      .collect {
+        case line if line.startsWith("module\t") =>
+          line.split("\\t", -1).toList match
+            case _ :: identifier :: version :: _ =>
+              identifier.split(":", 2).toList match
+                case organisation :: name :: Nil => Some(LockedModule(ResolvedModule(organisation, name), version))
+                case _                           => None
+            case _ => None
+      }
+      .flatten
+      .toList
+      .distinct
 
   private def sha256(path: Path): String =
     val digest = MessageDigest.getInstance("SHA-256")
