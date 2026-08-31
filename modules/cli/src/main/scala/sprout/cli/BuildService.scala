@@ -3,7 +3,7 @@ package sprout.cli
 import cats.effect.IO
 import cats.syntax.all.*
 import sprout.core.*
-import sprout.config.{ProjectConfig, ProjectConfigEditor}
+import sprout.config.{Lockfile, ProjectConfig, ProjectConfigEditor}
 import sprout.compiler.{CachingScalaCompiler, FileCache, ZincScalaCompiler}
 import sprout.dependencies.CoursierDependencyResolver
 import sprout.packager.{ApplicationPackageRequest, ApplicationPackager, ApplicationPackageResult}
@@ -131,6 +131,14 @@ final class BuildService(
       )
     }
 
+  def lock(from: Path): IO[Unit] =
+    for
+      project <- load(from)
+      main <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
+      test <- resolver.resolve(project.scalaVersion, project.testDependencies)
+      _ <- Lockfile.write(project, main, test)
+    yield ()
+
   private def load(from: Path): IO[Project] = ProjectConfig.locate(from).flatMap(ProjectConfig.load)
 
   private def resolvedMainDependencies(from: Path): IO[(Project, ResolvedDependencies)] =
@@ -159,8 +167,10 @@ final class BuildService(
           BuildSession.main(project, dependencies.value, compiler.value, bridge.value),
           List(dependencies.cached, compiler.cached, bridge.cached).forall(identity)
         )
-      }.flatTap { case (_, cached) => reportResolution(cached) }
-        .map(_._1)
+      }.flatMap { case (session, cached) =>
+        ensureMainLock(project, session.mainDependencies) *>
+          reportResolution(cached).as(session)
+      }
     }
 
   private def sessionWithTests(from: Path): IO[BuildSession] =
@@ -180,10 +190,16 @@ final class BuildService(
       ).parMapN { (main, test, compiler, bridge) =>
         (
           BuildSession.withTests(project, main.value, test.value, compiler.value, bridge.value),
-          List(main.cached, test.cached, compiler.cached, bridge.cached).forall(identity)
+          List(main.cached, test.cached, compiler.cached, bridge.cached).forall(identity),
+          main.value,
+          test.value
         )
-      }.flatTap { case (_, cached) => reportResolution(cached) }
-        .map(_._1)
+      }.flatMap { case (session, cached, mainDependencies, testDependencies) =>
+        Lockfile.load(project).flatMap {
+          case Some(lock) => Lockfile.verify(project, mainDependencies, testDependencies, lock)
+          case None       => Lockfile.write(project, mainDependencies, testDependencies)
+        } *> reportResolution(cached).as(session)
+      }
     }
 
   private def compileMain(session: BuildSession): IO[CompilationResult] =
@@ -266,6 +282,20 @@ final class BuildService(
 
   private def metadata(project: Project): BuildMetadataCache =
     BuildMetadataCache(project.layout.metadataDirectory)
+
+  private def ensureMainLock(project: Project, main: ResolvedDependencies): IO[Unit] =
+    Lockfile.load(project).flatMap {
+      case Some(lock) => Lockfile.verifyMain(project, main, lock)
+      case None       =>
+        if project.testDependencies == project.mainDependencies then
+          Lockfile.write(project, main, main)
+        else
+          metadata(project)
+            .dependencies(project.scalaVersion, project.testDependencies)(
+              resolver.resolve(project.scalaVersion, project.testDependencies)
+            )
+            .flatMap(test => Lockfile.write(project, main, test.value))
+    }
 
   private def reportResolution(cached: Boolean): IO[Unit] =
     IO.println(if cached then "Dependencies cached" else "Resolving dependencies...")

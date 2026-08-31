@@ -83,7 +83,9 @@ object Main extends IOApp:
           .flatMap(_ => IO.println(s"Removed $name\n\nUpdated sprout.toml"))
       case CliCommand.Graph     => service.graph(Path.of(".")).flatMap(IO.println)
       case CliCommand.Why(name) => service.why(Path.of("."), name).flatMap(IO.println)
-      case CliCommand.SetupIde  =>
+      case CliCommand.Lock      =>
+        service.lock(Path.of(".")).flatMap(_ => IO.println("✓ Updated sprout.lock"))
+      case CliCommand.SetupIde =>
         for
           config <- sprout.config.ProjectConfig.locate(Path.of("."))
           root = config.toAbsolutePath.normalize.getParent
@@ -119,6 +121,7 @@ object Main extends IOApp:
        |              Remove a dependency from sprout.toml
        |  graph       Show the resolved dependency tree
        |  why NAME    Show every path introducing a dependency
+       |  lock        Resolve dependencies and update sprout.lock
        |  setup-ide  Configure Metals and other BSP-compatible editors
        |
        |Options:

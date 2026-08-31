@@ -94,6 +94,11 @@ class CliSuite extends munit.FunSuite:
     assertEquals(Cli.parse(List("why")), Left("Command 'why' requires a dependency name"))
   }
 
+  test("parses lock only without extra arguments") {
+    assertEquals(Cli.parse(List("lock")), Right(CliInvocation(CliCommand.Lock, false)))
+    assertEquals(Cli.parse(List("lock", "extra")), Left("Usage: sprout lock"))
+  }
+
   test("parses package without accepting build-script arguments") {
     assertEquals(Cli.parse(List("package")), Right(CliInvocation(CliCommand.Package, false)))
     assertEquals(Cli.parse(List("package", "anything")), Left("Usage: sprout package"))

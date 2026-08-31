@@ -283,9 +283,11 @@ class BuildIntegrationSuite extends munit.FunSuite:
     val stream = Files.walk(source)
     try
       stream.iterator.asScala.foreach { path =>
-        val destination = target.resolve(source.relativize(path).toString)
-        if Files.isDirectory(path) then Files.createDirectories(destination)
-        else Files.copy(path, destination, StandardCopyOption.REPLACE_EXISTING)
+        val relative = source.relativize(path)
+        if !relative.startsWith(".sprout") then
+          val destination = target.resolve(relative.toString)
+          if Files.isDirectory(path) then Files.createDirectories(destination)
+          else Files.copy(path, destination, StandardCopyOption.REPLACE_EXISTING)
       }
     finally stream.close()
     target

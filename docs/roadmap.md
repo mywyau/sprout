@@ -61,6 +61,8 @@ working ordinary Scala build before expanding the surface area.
 ## Next
 
 - Incremental compile telemetry and larger-project benchmark tracking
+- Cache-invalidation regression fixtures covering source, resource, dependency, and configuration
+  changes
 
 ## v0.3
 
@@ -75,8 +77,7 @@ working ordinary Scala build before expanding the surface area.
 ## v1.0
 
 - Stable configuration format
-- Dependency lockfile
-- Reproducible builds
+- Dependency lockfile enforcement and reproducible builds
 
 Candidate work such as a local daemon, `doctor`, `update`, `outdated`, and external scripts will be
 evaluated against the product principle: ordinary builds should remain boring, predictable, and fast.

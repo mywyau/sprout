@@ -74,6 +74,39 @@ class HashingSuite extends munit.FunSuite:
     assertNotEquals(original, Hashing.compilationKey(request).unsafeRunSync())
   }
 
+  test("compilation fingerprints include resource additions, edits, and deletions") {
+    val fixture = requestFixture()
+    val resources = Files.createDirectories(fixture.root.resolve("resources"))
+    val request = fixture.request.copy(resourceDirectories = List(resources))
+    val empty = Hashing.compilationKey(request).unsafeRunSync()
+
+    val resource = Files.writeString(resources.resolve("application.conf"), "first")
+    val added = Hashing.compilationKey(request).unsafeRunSync()
+    Files.writeString(resource, "other")
+    val changed = Hashing.compilationKey(request).unsafeRunSync()
+    Files.delete(resource)
+    val deleted = Hashing.compilationKey(request).unsafeRunSync()
+
+    assertNotEquals(empty, added)
+    assertNotEquals(added, changed)
+    assertEquals(empty, deleted)
+  }
+
+  test("compilation fingerprints invalidate for source edits and source-set changes") {
+    val fixture = requestFixture()
+    val original = Hashing.compilationKey(fixture.request).unsafeRunSync()
+    Files.writeString(fixture.root.resolve("Main.scala"), "object Main: val answer = 42")
+    val edited = Hashing.compilationKey(fixture.request).unsafeRunSync()
+    val added = Files.writeString(fixture.root.resolve("Added.scala"), "object Added")
+    val expanded =
+      Hashing
+        .compilationKey(fixture.request.copy(sources = fixture.request.sources :+ added))
+        .unsafeRunSync()
+
+    assertNotEquals(original, edited)
+    assertNotEquals(edited, expanded)
+  }
+
   private def requestFixture(): RequestFixture =
     val root = Files.createTempDirectory("sprout-hashing")
     val source = Files.writeString(root.resolve("Main.scala"), "object Main")
