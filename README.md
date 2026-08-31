@@ -140,6 +140,7 @@ sprout --version
 sprout new hello
 cd hello
 
+sprout lock
 sprout compile  # cold compilation
 sprout compile  # should report nothing to build
 sprout run
@@ -325,9 +326,10 @@ Compilation caching skips an unchanged compilation using content fingerprints fo
 dependency and compiler classpaths, compiler bridge, Scala version, compiler options, JVM target, and
 compiled output. Changed builds use Zinc analysis to recompile affected sources. Analysis is
 versioned, written atomically, and safely rebuilt when missing or corrupt.
-Sprout creates a deterministic `sprout.lock` on the first build. It records the selected main and
-test dependency graphs and SHA-256 digests of their artifacts; subsequent builds verify the resolved
-graph and artifact bytes against it. Run `sprout lock` after intentionally changing `sprout.toml`.
+`sprout lock` creates a deterministic `sprout.lock`, recording the selected main and test dependency
+graphs and SHA-256 digests of their artifacts. Builds and BSP compilation require that lock and verify
+the resolved graph and artifact bytes against it; rerun `sprout lock` after intentionally changing
+`sprout.toml`.
 Dependency diagnostics currently cover the main scope; test-scope graph queries are not yet exposed.
 BSP currently covers editor import, dependency sources, and compilation but not editor run, test, or
 debug requests. There is no daemon, library publishing, container-image creation, or multi-module

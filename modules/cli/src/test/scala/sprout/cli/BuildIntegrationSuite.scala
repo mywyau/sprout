@@ -290,6 +290,7 @@ class BuildIntegrationSuite extends munit.FunSuite:
           else Files.copy(path, destination, StandardCopyOption.REPLACE_EXISTING)
       }
     finally stream.close()
+    BuildService().lock(target).unsafeRunSync()
     target
 
   private final class CountingResolver(delegate: DependencyResolver[IO])

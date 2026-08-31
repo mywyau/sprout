@@ -32,6 +32,13 @@ object Lockfile:
       decode(Files.readAllLines(file, StandardCharsets.UTF_8).toArray(new Array[String](0)).toList)
   }
 
+  def require(project: Project): IO[DependencyLock] =
+    load(project).flatMap(
+      IO.fromOption(_)(
+        SproutError.User("No sprout.lock found; run 'sprout lock' before building")
+      )
+    )
+
   def write(
       project: Project,
       main: ResolvedDependencies,
@@ -62,6 +69,15 @@ object Lockfile:
     IO.blocking {
       if lock.input != input(project) || lock.main != snapshot(main) then stale()
     }
+
+  def verifyTest(project: Project, test: ResolvedDependencies, lock: DependencyLock): IO[Unit] =
+    IO.blocking {
+      if lock.input != input(project) || lock.test != snapshot(test) then stale()
+    }
+
+  def verifyInput(project: Project, lock: DependencyLock): IO[Unit] = IO.blocking {
+    if lock.input != input(project) then stale()
+  }
 
   private def stale(): Nothing =
     throw SproutError.User(

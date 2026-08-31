@@ -3,7 +3,7 @@ package sprout.bsp
 import cats.effect.IO
 import cats.syntax.all.*
 import sprout.compiler.{CachingScalaCompiler, FileCache, ZincScalaCompiler}
-import sprout.config.ProjectConfig
+import sprout.config.{Lockfile, ProjectConfig}
 import sprout.core.*
 import sprout.dependencies.CoursierDependencyResolver
 import java.nio.file.{Files, Path}
@@ -36,21 +36,28 @@ private[bsp] final class BspWorkspace(root: Path):
     val dependencies = kind match
       case TargetKind.Main => value.mainDependencies
       case TargetKind.Test => value.testDependencies
-    (
+    Lockfile.require(value).flatTap(Lockfile.verifyInput(value, _)) *> (
       resolver.resolve(value.scalaVersion, dependencies),
       resolver.compilerClasspath(value.scalaVersion),
       resolver.compilerBridge(value.scalaVersion)
     )
       .parMapN((resolved, compiler, bridge) =>
-        TargetClasspath(value, kind, resolved.classpath.paths, compiler.paths, bridge)
+        TargetClasspath(value, kind, resolved.classpath.paths, compiler.paths, bridge) -> resolved
       )
+      .flatMap { case (target, resolved) =>
+        Lockfile.require(value).flatMap { lock =>
+          (if kind == TargetKind.Main then Lockfile.verifyMain(value, resolved, lock)
+           else Lockfile.verifyTest(value, resolved, lock)).as(target)
+        }
+      }
   }
 
   def dependencySources(kind: TargetKind): IO[List[Path]] = project.flatMap { value =>
     val dependencies = kind match
       case TargetKind.Main => value.mainDependencies
       case TargetKind.Test => value.testDependencies
-    resolver.resolveSources(value.scalaVersion, dependencies).map(_.paths)
+    Lockfile.require(value).flatTap(Lockfile.verifyInput(value, _)) *>
+      resolver.resolveSources(value.scalaVersion, dependencies).map(_.paths)
   }
 
   def compile(kind: TargetKind): IO[CompilationResult] = classpath(kind).flatMap { target =>

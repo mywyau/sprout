@@ -1,6 +1,9 @@
 package sprout.bsp
 
 import ch.epfl.scala.bsp4j.*
+import cats.effect.unsafe.implicits.global
+import sprout.config.{Lockfile, ProjectConfig}
+import sprout.dependencies.CoursierDependencyResolver
 import java.nio.file.Files
 import java.util.concurrent.{CopyOnWriteArrayList, CountDownLatch, TimeUnit}
 import scala.jdk.CollectionConverters.*
@@ -20,6 +23,7 @@ class SproutBuildServerSuite extends munit.FunSuite:
         |cats-effect = "org.typelevel::cats-effect:3.6.3"
         |""".stripMargin
     )
+    writeLock(root)
     val server = SproutBuildServer(root, "test")
     val targets = server.workspaceBuildTargets().get().getTargets.asScala.toList
 
@@ -68,6 +72,7 @@ class SproutBuildServerSuite extends munit.FunSuite:
         |""".stripMargin
     )
     Files.writeString(source, "object Main:\n  val answer: Int = \"wrong\"\n")
+    writeLock(root)
 
     val client = RecordingBuildClient()
     val server = SproutBuildServer(root, "test")
@@ -118,6 +123,13 @@ class SproutBuildServerSuite extends munit.FunSuite:
 
     assert(exitRequested.await(100, TimeUnit.MILLISECONDS))
   }
+
+  private def writeLock(root: java.nio.file.Path): Unit =
+    val project = ProjectConfig.load(root.resolve("sprout.toml")).unsafeRunSync()
+    val resolver = CoursierDependencyResolver()
+    val main = resolver.resolve(project.scalaVersion, project.mainDependencies).unsafeRunSync()
+    val test = resolver.resolve(project.scalaVersion, project.testDependencies).unsafeRunSync()
+    Lockfile.write(project, main, test).unsafeRunSync()
 
 private final class RecordingBuildClient extends BuildClient:
   val diagnostics = CopyOnWriteArrayList[PublishDiagnosticsParams]()

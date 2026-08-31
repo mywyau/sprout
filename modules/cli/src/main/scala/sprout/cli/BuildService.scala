@@ -154,7 +154,7 @@ final class BuildService(
   private def mainSession(from: Path): IO[BuildSession] =
     load(from).flatMap { project =>
       val cache = metadata(project)
-      (
+      Lockfile.require(project).flatTap(Lockfile.verifyInput(project, _)) *> (
         cache.dependencies(project.scalaVersion, project.mainDependencies)(
           resolver.resolve(project.scalaVersion, project.mainDependencies)
         ),
@@ -168,7 +168,9 @@ final class BuildService(
           List(dependencies.cached, compiler.cached, bridge.cached).forall(identity)
         )
       }.flatMap { case (session, cached) =>
-        ensureMainLock(project, session.mainDependencies) *>
+        Lockfile
+          .require(project)
+          .flatMap(Lockfile.verifyMain(project, session.mainDependencies, _)) *>
           reportResolution(cached).as(session)
       }
     }
@@ -176,7 +178,7 @@ final class BuildService(
   private def sessionWithTests(from: Path): IO[BuildSession] =
     load(from).flatMap { project =>
       val cache = metadata(project)
-      (
+      Lockfile.require(project).flatTap(Lockfile.verifyInput(project, _)) *> (
         cache.dependencies(project.scalaVersion, project.mainDependencies)(
           resolver.resolve(project.scalaVersion, project.mainDependencies)
         ),
@@ -195,10 +197,10 @@ final class BuildService(
           test.value
         )
       }.flatMap { case (session, cached, mainDependencies, testDependencies) =>
-        Lockfile.load(project).flatMap {
-          case Some(lock) => Lockfile.verify(project, mainDependencies, testDependencies, lock)
-          case None       => Lockfile.write(project, mainDependencies, testDependencies)
-        } *> reportResolution(cached).as(session)
+        Lockfile
+          .require(project)
+          .flatMap(Lockfile.verify(project, mainDependencies, testDependencies, _)) *>
+          reportResolution(cached).as(session)
       }
     }
 
@@ -282,20 +284,6 @@ final class BuildService(
 
   private def metadata(project: Project): BuildMetadataCache =
     BuildMetadataCache(project.layout.metadataDirectory)
-
-  private def ensureMainLock(project: Project, main: ResolvedDependencies): IO[Unit] =
-    Lockfile.load(project).flatMap {
-      case Some(lock) => Lockfile.verifyMain(project, main, lock)
-      case None       =>
-        if project.testDependencies == project.mainDependencies then
-          Lockfile.write(project, main, main)
-        else
-          metadata(project)
-            .dependencies(project.scalaVersion, project.testDependencies)(
-              resolver.resolve(project.scalaVersion, project.testDependencies)
-            )
-            .flatMap(test => Lockfile.write(project, main, test.value))
-    }
 
   private def reportResolution(cached: Boolean): IO[Unit] =
     IO.println(if cached then "Dependencies cached" else "Resolving dependencies...")
