@@ -156,23 +156,27 @@ final class BuildService(
       val cache = metadata(project)
       Lockfile.require(project).flatTap(Lockfile.verifyInput(project, _)).flatMap { lock =>
         (
-        cache.dependencies(project.scalaVersion, project.mainDependencies)(
-          resolver.resolveLocked(project.scalaVersion, project.mainDependencies, Lockfile.mainModules(lock))
-        ),
-        cache.compilerClasspath(project.scalaVersion)(
-          resolver.compilerClasspath(project.scalaVersion)
-        ),
-        cache.compilerBridge(project.scalaVersion)(resolver.compilerBridge(project.scalaVersion))
-      ).parMapN { (dependencies, compiler, bridge) =>
-        (
-          BuildSession.main(project, dependencies.value, compiler.value, bridge.value),
-          List(dependencies.cached, compiler.cached, bridge.cached).forall(identity)
-        )
-        ).flatMap { case (session, cached) =>
-        Lockfile
-          .require(project)
-          .flatMap(Lockfile.verifyMain(project, session.mainDependencies, _)) *>
-          reportResolution(cached).as(session)
+          cache.dependencies(project.scalaVersion, project.mainDependencies)(
+            resolver.resolveLocked(
+              project.scalaVersion,
+              project.mainDependencies,
+              Lockfile.mainModules(lock)
+            )
+          ),
+          cache.compilerClasspath(project.scalaVersion)(
+            resolver.compilerClasspath(project.scalaVersion)
+          ),
+          cache.compilerBridge(project.scalaVersion)(resolver.compilerBridge(project.scalaVersion))
+        ).parMapN { (dependencies, compiler, bridge) =>
+          (
+            BuildSession.main(project, dependencies.value, compiler.value, bridge.value),
+            List(dependencies.cached, compiler.cached, bridge.cached).forall(identity)
+          )
+        }.flatMap { case (session, cached) =>
+          Lockfile
+            .require(project)
+            .flatMap(Lockfile.verifyMain(project, session.mainDependencies, _)) *>
+            reportResolution(cached).as(session)
         }
       }
     }
@@ -182,28 +186,36 @@ final class BuildService(
       val cache = metadata(project)
       Lockfile.require(project).flatTap(Lockfile.verifyInput(project, _)).flatMap { lock =>
         (
-        cache.dependencies(project.scalaVersion, project.mainDependencies)(
-          resolver.resolveLocked(project.scalaVersion, project.mainDependencies, Lockfile.mainModules(lock))
-        ),
-        cache.dependencies(project.scalaVersion, project.testDependencies)(
-          resolver.resolveLocked(project.scalaVersion, project.testDependencies, Lockfile.testModules(lock))
-        ),
-        cache.compilerClasspath(project.scalaVersion)(
-          resolver.compilerClasspath(project.scalaVersion)
-        ),
-        cache.compilerBridge(project.scalaVersion)(resolver.compilerBridge(project.scalaVersion))
-      ).parMapN { (main, test, compiler, bridge) =>
-        (
-          BuildSession.withTests(project, main.value, test.value, compiler.value, bridge.value),
-          List(main.cached, test.cached, compiler.cached, bridge.cached).forall(identity),
-          main.value,
-          test.value
-        )
-        ).flatMap { case (session, cached, mainDependencies, testDependencies) =>
-        Lockfile
-          .require(project)
-          .flatMap(Lockfile.verify(project, mainDependencies, testDependencies, _)) *>
-          reportResolution(cached).as(session)
+          cache.dependencies(project.scalaVersion, project.mainDependencies)(
+            resolver.resolveLocked(
+              project.scalaVersion,
+              project.mainDependencies,
+              Lockfile.mainModules(lock)
+            )
+          ),
+          cache.dependencies(project.scalaVersion, project.testDependencies)(
+            resolver.resolveLocked(
+              project.scalaVersion,
+              project.testDependencies,
+              Lockfile.testModules(lock)
+            )
+          ),
+          cache.compilerClasspath(project.scalaVersion)(
+            resolver.compilerClasspath(project.scalaVersion)
+          ),
+          cache.compilerBridge(project.scalaVersion)(resolver.compilerBridge(project.scalaVersion))
+        ).parMapN { (main, test, compiler, bridge) =>
+          (
+            BuildSession.withTests(project, main.value, test.value, compiler.value, bridge.value),
+            List(main.cached, test.cached, compiler.cached, bridge.cached).forall(identity),
+            main.value,
+            test.value
+          )
+        }.flatMap { case (session, cached, mainDependencies, testDependencies) =>
+          Lockfile
+            .require(project)
+            .flatMap(Lockfile.verify(project, mainDependencies, testDependencies, _)) *>
+            reportResolution(cached).as(session)
         }
       }
     }

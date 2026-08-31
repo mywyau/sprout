@@ -83,7 +83,10 @@ class BuildIntegrationSuite extends munit.FunSuite:
   test("rejects a changed configuration until the lock is refreshed") {
     val project = copyFixture("hello-world")
     val config = project.resolve("sprout.toml")
-    Files.writeString(config, Files.readString(config).replace("scala = \"3.3.6\"", "scala = \"3.3.7\""))
+    Files.writeString(
+      config,
+      Files.readString(config).replace("scala = \"3.3.6\"", "scala = \"3.3.7\"")
+    )
 
     intercept[SproutError.User](service.compile(project).unsafeRunSync())
   }

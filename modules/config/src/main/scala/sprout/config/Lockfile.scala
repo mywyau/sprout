@@ -127,8 +127,9 @@ object Lockfile:
           line.split("\\t", -1).toList match
             case _ :: identifier :: version :: _ =>
               identifier.split(":", 2).toList match
-                case organisation :: name :: Nil => Some(LockedModule(ResolvedModule(organisation, name), version))
-                case _                           => None
+                case organisation :: name :: Nil =>
+                  Some(LockedModule(ResolvedModule(organisation, name), version))
+                case _ => None
             case _ => None
       }
       .flatten

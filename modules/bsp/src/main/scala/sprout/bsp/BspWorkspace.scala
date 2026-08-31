@@ -37,16 +37,15 @@ private[bsp] final class BspWorkspace(root: Path):
       case TargetKind.Main => value.mainDependencies
       case TargetKind.Test => value.testDependencies
     Lockfile.require(value).flatTap(Lockfile.verifyInput(value, _)).flatMap { lock =>
-      val locked = if kind == TargetKind.Main then Lockfile.mainModules(lock) else Lockfile.testModules(lock)
+      val locked =
+        if kind == TargetKind.Main then Lockfile.mainModules(lock) else Lockfile.testModules(lock)
       (
-      resolver.resolveLocked(value.scalaVersion, dependencies, locked),
-      resolver.compilerClasspath(value.scalaVersion),
-      resolver.compilerBridge(value.scalaVersion)
-    )
-      .parMapN((resolved, compiler, bridge) =>
+        resolver.resolveLocked(value.scalaVersion, dependencies, locked),
+        resolver.compilerClasspath(value.scalaVersion),
+        resolver.compilerBridge(value.scalaVersion)
+      ).parMapN { (resolved, compiler, bridge) =>
         TargetClasspath(value, kind, resolved.classpath.paths, compiler.paths, bridge) -> resolved
-      )
-      .flatMap { case (target, resolved) =>
+      }.flatMap { case (target, resolved) =>
         Lockfile.require(value).flatMap { lock =>
           (if kind == TargetKind.Main then Lockfile.verifyMain(value, resolved, lock)
            else Lockfile.verifyTest(value, resolved, lock)).as(target)

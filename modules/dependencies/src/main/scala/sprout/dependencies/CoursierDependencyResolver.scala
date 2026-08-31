@@ -34,7 +34,10 @@ final class CoursierDependencyResolver extends DependencyResolver[IO]:
       .fold(message => throw IllegalArgumentException(message), identity)
     val exact = (scalaLibrary :: locked.map { entry =>
       Dependency
-        .parse(s"${entry.module.organisation}:${entry.module.name}:${entry.version}", DependencyScope.Main)
+        .parse(
+          s"${entry.module.organisation}:${entry.module.name}:${entry.version}",
+          DependencyScope.Main
+        )
         .fold(message => throw IllegalArgumentException(message), identity)
     }).distinct
     fetch(scalaVersion, exact, dependencies).map { result =>
