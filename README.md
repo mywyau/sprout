@@ -73,6 +73,7 @@ scripts/test-distribution.sh 0.1.0-SNAPSHOT target/release
 ```bash
 sprout new hello
 cd hello
+sprout lock
 sprout run
 # Hello from Sprout!
 
@@ -117,6 +118,7 @@ See [application packaging](docs/packaging.md) for the layout and checksum comma
 Install the Metals extension, then configure the current Sprout project once:
 
 ```bash
+sprout lock
 sprout setup-ide
 ```
 
@@ -169,7 +171,7 @@ object Main extends IOApp.Simple:
   def run: IO[Unit] = IO.println("Cats Effect resolved by Sprout")
 ```
 
-Run `sprout run` twice. The first run should resolve and compile; the second should reuse downloaded
+Run `sprout lock`, then run `sprout run` twice. The first run should compile; the second should reuse downloaded
 artifacts and unchanged classes. Also introduce a deliberate type error and confirm that Sprout keeps
 the compiler's file and line information without printing an internal stack trace. Use `--debug` to
 verify that deeper diagnostics remain available when requested.
@@ -178,9 +180,13 @@ Add dependencies without editing TOML by hand:
 
 ```bash
 sprout add org.typelevel::cats-effect:3.6.3
+sprout lock
 sprout remove cats-effect
+sprout lock
 sprout remove --test munit
+sprout lock
 sprout add --test org.scalameta::munit:1.1.1
+sprout lock
 ```
 
 `add` accepts ordinary Maven coordinates and Scala-aware `organisation::artifact:version`
