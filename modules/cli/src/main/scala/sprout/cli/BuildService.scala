@@ -34,7 +34,7 @@ final class BuildService(
   def test(
       from: Path,
       selector: Option[String] = None,
-      verbose: Boolean = false
+      verbose: Boolean = true
   ): IO[TestResult] =
     for
       session <- sessionWithTests(from)

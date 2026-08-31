@@ -14,7 +14,7 @@ final class MUnitTestRunner extends TestRunner[IO]:
       classDirectories: List[Path],
       classpath: List[Path],
       selection: TestSelection = TestSelection.All,
-      output: TestOutput = TestOutput.Compact
+      output: TestOutput = TestOutput.Verbose
   ): IO[TestResult] = IO.blocking {
     // Share sbt.testing types with Sprout while loading the project's framework and suites in isolation.
     val loader = new URLClassLoader(classpath.map(_.toUri.toURL).toArray, getClass.getClassLoader)

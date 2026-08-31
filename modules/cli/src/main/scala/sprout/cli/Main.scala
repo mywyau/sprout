@@ -111,7 +111,7 @@ object Main extends IOApp:
        |  new NAME   Create a Scala project
        |  compile    Compile main sources
        |  run [ARGS] Compile and run the application
-       |  test [--verbose] [SUITE_OR_FILE]
+       |  test [--quiet] [SUITE_OR_FILE]
        |             Compile tests and run all or one MUnit suite
        |  package    Create a runnable application directory and archives
        |  clean      Delete project-local build state

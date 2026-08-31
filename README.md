@@ -77,7 +77,7 @@ sprout run
 # Hello from Sprout!
 
 sprout test
-# Prints a compact summary; use `sprout test --verbose` for each test name.
+# Prints each test name; use `sprout test --quiet` for a summary only.
 sprout package
 sprout clean
 ```
@@ -144,7 +144,7 @@ sprout compile  # cold compilation
 sprout compile  # should report nothing to build
 sprout run
 sprout test
-sprout test --verbose
+sprout test --quiet
 sprout test MainSuite
 sprout test src/test/scala/MainSuite.scala
 sprout lock   # refresh the checked-in dependency lock after intentional changes
@@ -237,7 +237,7 @@ are included in the application JAR produced by `sprout package`.
 | `sprout new NAME` | Generate an application and MUnit test |
 | `sprout compile` | Resolve and compile main sources |
 | `sprout run [ARGS]` | Compile, detect one main class, and run it |
-| `sprout test [--verbose] [SUITE_OR_FILE]` | Compile tests and run all or one MUnit suite; use `--verbose` for per-test output |
+| `sprout test [--quiet] [SUITE_OR_FILE]` | Compile tests and run all or one MUnit suite; use `--quiet` for summary-only output |
 | `sprout package` | Create a runnable application directory, archives, and checksums |
 | `sprout clean` | Delete project-local `.sprout/` state |
 | `sprout add [--test] COORDINATE` | Resolve and add a main or test dependency |

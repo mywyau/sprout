@@ -78,10 +78,10 @@ object Cli:
       arguments: List[String],
       debug: Boolean
   ): Either[String, CliInvocation] =
-    val verbose = arguments.contains("--verbose")
-    val values = arguments.filterNot(_ == "--verbose")
+    val quiet = arguments.contains("--quiet")
+    val values = arguments.filterNot(_ == "--quiet")
     values match
-      case Nil => Right(CliInvocation(CliCommand.Test(None, verbose), debug))
+      case Nil => Right(CliInvocation(CliCommand.Test(None, verbose = !quiet), debug))
       case selector :: Nil if !selector.startsWith("--") =>
-        Right(CliInvocation(CliCommand.Test(Some(selector), verbose), debug))
-      case _ => Left("Usage: sprout test [--verbose] [SUITE_OR_FILE]")
+        Right(CliInvocation(CliCommand.Test(Some(selector), verbose = !quiet), debug))
+      case _ => Left("Usage: sprout test [--quiet] [SUITE_OR_FILE]")

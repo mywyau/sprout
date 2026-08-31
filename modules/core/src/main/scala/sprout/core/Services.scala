@@ -32,7 +32,7 @@ trait TestRunner[F[_]]:
       classDirectories: List[Path],
       classpath: List[Path],
       selection: TestSelection = TestSelection.All,
-      output: TestOutput = TestOutput.Compact
+      output: TestOutput = TestOutput.Verbose
   ): F[TestResult]
 
 final case class TestResult(total: Int, failed: Int)
