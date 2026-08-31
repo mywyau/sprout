@@ -37,7 +37,8 @@ class BuildIntegrationSuite extends munit.FunSuite:
       CompilationResult.UpToDate
     )
 
-    assertEquals(resolver.resolutions.size(), 1)
+    assertEquals(resolver.resolutions.size(), 0)
+    assertEquals(resolver.lockedResolutions.size(), 1)
     assertEquals(resolver.compilerClasspathInvocations.get(), 1)
     assertEquals(resolver.compilerBridgeInvocations.get(), 1)
     assert(Files.isDirectory(project.resolve(".sprout/metadata/build-session")))
@@ -77,6 +78,14 @@ class BuildIntegrationSuite extends munit.FunSuite:
     Files.delete(project.resolve("src/main/resources/application.conf"))
     assertEquals(service.compile(project).unsafeRunSync(), CompilationResult.ResourcesUpdated(1))
     assert(!Files.exists(project.resolve(".sprout/classes/application.conf")))
+  }
+
+  test("rejects a changed configuration until the lock is refreshed") {
+    val project = copyFixture("hello-world")
+    val config = project.resolve("sprout.toml")
+    Files.writeString(config, Files.readString(config).replace("scala = \"3.3.6\"", "scala = \"3.3.7\""))
+
+    intercept[SproutError.User](service.compile(project).unsafeRunSync())
   }
 
   test("rejects resources that collide with compiled class output") {
@@ -153,7 +162,8 @@ class BuildIntegrationSuite extends munit.FunSuite:
     val project = copyFixture("hello-world")
     val resolver = CountingResolver()
     BuildService(resolver = resolver).run(project, Nil).unsafeRunSync()
-    assertEquals(resolver.resolutions.asScala.toList, List(Nil))
+    assertEquals(resolver.resolutions.size(), 0)
+    assertEquals(resolver.lockedResolutions.size(), 1)
     assertEquals(resolver.compilerClasspathInvocations.get(), 1)
   }
 
@@ -175,7 +185,8 @@ class BuildIntegrationSuite extends munit.FunSuite:
     val exitCode = process.waitFor()
     assertEquals(exitCode, 0, output)
     assert(output.contains("Cats Effect resolved by Sprout"), output)
-    assertEquals(resolver.resolutions.size(), 1)
+    assertEquals(resolver.resolutions.size(), 0)
+    assertEquals(resolver.lockedResolutions.size(), 1)
     assertEquals(resolver.compilerClasspathInvocations.get(), 1)
   }
 
@@ -185,10 +196,8 @@ class BuildIntegrationSuite extends munit.FunSuite:
     val result = BuildService(resolver = resolver).test(project).unsafeRunSync()
     assertEquals(result.failed, 0)
     assertEquals(result.total, 2)
-    assertEquals(
-      resolver.resolutions.asScala.toList.map(_.map(_.display)).sortBy(_.mkString),
-      List(Nil, List("org.scalameta::munit:1.1.1"))
-    )
+    assertEquals(resolver.resolutions.size(), 0)
+    assertEquals(resolver.lockedResolutions.size(), 2)
     assertEquals(resolver.compilerClasspathInvocations.get(), 1)
   }
 
@@ -296,6 +305,7 @@ class BuildIntegrationSuite extends munit.FunSuite:
   private final class CountingResolver(delegate: DependencyResolver[IO])
       extends DependencyResolver[IO]:
     val resolutions = new ConcurrentLinkedQueue[List[Dependency]]()
+    val lockedResolutions = new ConcurrentLinkedQueue[List[LockedModule]]()
     val compilerClasspathInvocations = AtomicInteger()
     val compilerBridgeInvocations = AtomicInteger()
 
@@ -304,6 +314,15 @@ class BuildIntegrationSuite extends munit.FunSuite:
         dependencies: List[Dependency]
     ): IO[ResolvedDependencies] =
       IO(resolutions.add(dependencies)).flatMap(_ => delegate.resolve(scalaVersion, dependencies))
+
+    override def resolveLocked(
+        scalaVersion: ScalaVersion,
+        dependencies: List[Dependency],
+        locked: List[LockedModule]
+    ): IO[ResolvedDependencies] =
+      IO(lockedResolutions.add(locked)).flatMap(_ =>
+        delegate.resolveLocked(scalaVersion, dependencies, locked)
+      )
 
     def compilerClasspath(scalaVersion: ScalaVersion): IO[ResolvedClasspath] =
       IO(compilerClasspathInvocations.incrementAndGet()).flatMap(_ =>

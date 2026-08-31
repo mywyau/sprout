@@ -39,6 +39,17 @@ class CoursierDependencyResolverSuite extends munit.FunSuite:
     assert(catsCoreRoot.evicted)
   }
 
+  test("resolves the exact module versions recorded by a lock") {
+    val catsEffect = dependency("org.typelevel::cats-effect:3.6.3")
+    val selected = resolver.resolve(scalaVersion, List(catsEffect)).unsafeRunSync()
+    val locked = selected.graph.modules.map(node => LockedModule(node.module, node.version))
+
+    val resolved = resolver.resolveLocked(scalaVersion, List(catsEffect), locked).unsafeRunSync()
+
+    assert(resolved.classpath.paths.exists(_.getFileName.toString == "cats-effect_3-3.6.3.jar"))
+    assertEquals(resolved.graph.matching("cats-effect").head.version, "3.6.3")
+  }
+
   test("resolves the matching precompiled Scala 3 Zinc bridge") {
     val bridge = resolver.compilerBridge(scalaVersion).unsafeRunSync()
     val zip = ZipFile(bridge.toFile)

@@ -30,6 +30,10 @@ class LockfileSuite extends munit.FunSuite:
     Lockfile
       .verify(project, resolved, resolved, Lockfile.load(project).unsafeRunSync().get)
       .unsafeRunSync()
+    assertEquals(
+      Lockfile.mainModules(Lockfile.load(project).unsafeRunSync().get),
+      List(LockedModule(module, "1.0.0"))
+    )
 
     val changedScala = project.copy(scalaVersion = ScalaVersion.from("3.3.7").toOption.get)
     intercept[SproutError.User](
