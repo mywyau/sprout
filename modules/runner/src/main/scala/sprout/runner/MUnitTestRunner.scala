@@ -22,19 +22,16 @@ final class MUnitTestRunner extends TestRunner[IO]:
       var total = 0
       var failed = 0
       val capturedOutput = captureSuccessfulOutput(output) {
-        val suiteClass = loader.loadClass("munit.Suite")
-        val allCandidates = classDirectories.flatMap(classNames).sorted.filter { name =>
-          try suiteClass.isAssignableFrom(loader.loadClass(name))
-          catch case _: Throwable => false
+        val frameworks = FrameworkDefinition.available(loader)
+        val candidates = frameworks.flatMap { definition =>
+          val suiteClass = loader.loadClass(definition.suiteClass)
+          classDirectories.flatMap(classNames).distinct.sorted.collect {
+            case name if suiteClass.isAssignableFrom(loader.loadClass(name)) => definition -> name
+          }
         }
-        val candidates = selectSuites(allCandidates, selection)
-        if candidates.isEmpty then throw SproutError.User("No MUnit test suites found")
-        val framework = loader
-          .loadClass("munit.Framework")
-          .getDeclaredConstructor()
-          .newInstance()
-          .asInstanceOf[Framework]
-        val runner = framework.runner(Array.empty, Array.empty, loader)
+        val selected = selectSuites(candidates.map(_._2), selection).toSet
+        val runnable = candidates.filter((_, name) => selected.contains(name))
+        if runnable.isEmpty then throw SproutError.User("No supported test suites found")
         val handler = new EventHandler:
           def handle(event: Event): Unit =
             total += 1
@@ -48,19 +45,23 @@ final class MUnitTestRunner extends TestRunner[IO]:
           def info(message: String): Unit = if output == TestOutput.Verbose then println(message)
           def debug(message: String): Unit = ()
           def trace(throwable: Throwable): Unit = throwable.printStackTrace()
-        val fingerprint = new SubclassFingerprint:
-          def isModule(): Boolean = false
-          def requireNoArgConstructor(): Boolean = true
-          def superclassName(): String = "munit.Suite"
-        var tasks = runner
-          .tasks(
-            candidates
-              .map(name => new TaskDef(name, fingerprint, false, Array(new SuiteSelector)))
-              .toArray
-          )
-          .toList
-        while tasks.nonEmpty do tasks = tasks.flatMap(_.execute(handler, Array(logger)))
-        runner.done()
+        runnable.groupMap(_._1)(_._2).foreach { case (definition, names) =>
+          val framework = definition.create(loader)
+          val runner = framework.runner(Array.empty, Array.empty, loader)
+          val fingerprint = new SubclassFingerprint:
+            def isModule(): Boolean = false
+            def requireNoArgConstructor(): Boolean = true
+            def superclassName(): String = definition.suiteClass
+          var tasks = runner
+            .tasks(
+              names
+                .map(name => new TaskDef(name, fingerprint, false, Array(new SuiteSelector)))
+                .toArray
+            )
+            .toList
+          while tasks.nonEmpty do tasks = tasks.flatMap(_.execute(handler, Array(logger)))
+          runner.done()
+        }
       }
       if failed > 0 && capturedOutput.nonEmpty then System.err.print(capturedOutput)
       TestResult(total, failed)
@@ -100,7 +101,7 @@ final class MUnitTestRunner extends TestRunner[IO]:
           case suite :: Nil => List(suite)
           case many         =>
             throw SproutError.User(
-              s"MUnit suite name '$name' is ambiguous:\n\n${many.sorted.mkString("\n")}\n\n" +
+              s"Test suite name '$name' is ambiguous:\n\n${many.sorted.mkString("\n")}\n\n" +
                 "Use a fully qualified suite name or a source file path."
             )
 
@@ -133,3 +134,22 @@ final class MUnitTestRunner extends TestRunner[IO]:
 
 object MUnitTestRunner:
   private val outputLock = new Object
+
+private final case class FrameworkDefinition(factoryClass: String, suiteClass: String):
+  def create(loader: ClassLoader): Framework =
+    loader.loadClass(factoryClass).getDeclaredConstructor().newInstance().asInstanceOf[Framework]
+
+private object FrameworkDefinition:
+  private val Supported = List(
+    FrameworkDefinition("munit.Framework", "munit.Suite"),
+    FrameworkDefinition("org.scalatest.tools.Framework", "org.scalatest.Suite")
+  )
+
+  def available(loader: ClassLoader): List[FrameworkDefinition] =
+    Supported.filter { definition =>
+      try
+        loader.loadClass(definition.factoryClass)
+        loader.loadClass(definition.suiteClass)
+        true
+      catch case _: ClassNotFoundException => false
+    }

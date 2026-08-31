@@ -50,7 +50,13 @@ lazy val runner = project
   .dependsOn(core, compiler)
   .settings(
     name := "sprout-runner",
-    libraryDependencies ++= Seq("org.scala-sbt" % "test-interface" % "1.0", catsEffect, munit)
+    libraryDependencies ++= Seq(
+      "org.scala-sbt" % "test-interface" % "1.0",
+      catsEffect,
+      munit,
+      ("org.scalatest" %% "scalatest" % "3.2.19" % Test)
+        .exclude("org.scala-lang.modules", "scala-xml_3")
+    )
   )
 
 lazy val packager = project

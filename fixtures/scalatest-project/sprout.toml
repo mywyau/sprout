@@ -1,0 +1,6 @@
+[project]
+name = "scalatest-project"
+scala = "3.3.6"
+
+[test-dependencies]
+scalatest = "org.scalatest::scalatest:3.2.19"

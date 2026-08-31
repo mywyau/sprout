@@ -204,6 +204,12 @@ class BuildIntegrationSuite extends munit.FunSuite:
     assertEquals(resolver.compilerClasspathInvocations.get(), 1)
   }
 
+  test("runs ScalaTest through the framework boundary") {
+    val project = copyFixture("scalatest-project")
+
+    assertEquals(service.test(project).unsafeRunSync(), TestResult(total = 1, failed = 0))
+  }
+
   test("runs one MUnit suite selected by name or conventional source path") {
     val project = copyFixture("munit-project")
 

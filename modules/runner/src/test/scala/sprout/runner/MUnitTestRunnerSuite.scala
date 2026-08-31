@@ -22,7 +22,17 @@ class MUnitTestRunnerSuite extends munit.FunSuite:
     assert(!output.contains("OutputFixtureSuite"))
   }
 
-  private def run(output: Option[TestOutput] = None) = this.synchronized {
+  test("discovers and runs ScalaTest suites") {
+    val (result, _) = run(Some(TestOutput.Verbose), "sprout.runner.ScalaTestFixtureSuite")
+
+    assertEquals(result.failed, 0)
+    assertEquals(result.total, 1)
+  }
+
+  private def run(
+      output: Option[TestOutput] = None,
+      suite: String = "sprout.runner.OutputFixtureSuite"
+  ) = this.synchronized {
     val bytes = ByteArrayOutputStream()
     val classes = Path.of(getClass.getProtectionDomain.getCodeSource.getLocation.toURI)
     val original = System.out
@@ -35,13 +45,13 @@ class MUnitTestRunnerSuite extends munit.FunSuite:
           runner.run(
             List(classes),
             List(classes),
-            TestSelection.Suite("sprout.runner.OutputFixtureSuite")
+            TestSelection.Suite(suite)
           )
         )(value =>
           runner.run(
             List(classes),
             List(classes),
-            TestSelection.Suite("sprout.runner.OutputFixtureSuite"),
+            TestSelection.Suite(suite),
             value
           )
         )
