@@ -139,6 +139,8 @@ final class BuildService(
       _ <- Lockfile.write(project, main, test)
     yield ())
 
+  def doctor(from: Path): IO[DoctorReport] = Doctor.inspect(from)
+
   private def load(from: Path): IO[Project] = ProjectConfig.locate(from).flatMap(ProjectConfig.load)
 
   private def guarded[A](from: Path)(action: IO[A]): IO[A] =

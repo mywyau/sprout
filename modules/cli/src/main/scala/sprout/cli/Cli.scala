@@ -16,6 +16,7 @@ enum CliCommand:
   case Graph
   case Why(name: String)
   case Lock
+  case Doctor
   case SetupIde
   case Bsp
 
@@ -45,6 +46,8 @@ object Cli:
       case "why" :: _           => Left("Usage: sprout why NAME")
       case "lock" :: Nil        => Right(CliInvocation(CliCommand.Lock, debug))
       case "lock" :: _          => Left("Usage: sprout lock")
+      case "doctor" :: Nil      => Right(CliInvocation(CliCommand.Doctor, debug))
+      case "doctor" :: _        => Left("Usage: sprout doctor")
       case "setup-ide" :: Nil   => Right(CliInvocation(CliCommand.SetupIde, debug))
       case "bsp" :: Nil         => Right(CliInvocation(CliCommand.Bsp, debug))
       case command :: _         => Left(s"Unknown command '$command'. Run sprout --help.")

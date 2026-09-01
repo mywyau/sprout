@@ -168,6 +168,7 @@ They are available to `run` and `test`, and main resources are included in appli
 | `sprout graph` | Show the resolved main dependency tree |
 | `sprout why NAME` | Show every path introducing a main dependency |
 | `sprout lock` | Resolve dependencies and update `sprout.lock` |
+| `sprout doctor` | Diagnose JDK, lockfile, cache, permissions, project layout, and BSP setup |
 | `sprout setup-ide` | Install the BSP connection used by Metals-compatible editors |
 
 Pass `--debug` with a command to include stack traces for unexpected failures. Normal configuration,

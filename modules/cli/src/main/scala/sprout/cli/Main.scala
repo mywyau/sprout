@@ -85,6 +85,11 @@ object Main extends IOApp:
       case CliCommand.Why(name) => service.why(Path.of("."), name).flatMap(IO.println)
       case CliCommand.Lock      =>
         service.lock(Path.of(".")).flatMap(_ => IO.println("✓ Updated sprout.lock"))
+      case CliCommand.Doctor =>
+        service.doctor(Path.of(".")).flatMap { report =>
+          IO.println(report.render) *>
+            IO.raiseWhen(!report.healthy)(SproutError.User("Sprout doctor found blocking issues"))
+        }
       case CliCommand.SetupIde =>
         for
           config <- sprout.config.ProjectConfig.locate(Path.of("."))
@@ -112,7 +117,7 @@ object Main extends IOApp:
        |  compile    Compile main sources
        |  run [ARGS] Compile and run the application
        |  test [--quiet] [SUITE_OR_FILE]
-       |             Compile tests and run all or one MUnit suite
+       |             Compile tests and run all or one MUnit or ScalaTest suite
        |  package    Create a runnable application directory and archives
        |  clean      Delete project-local build state
        |  add [--test] COORDINATE
@@ -122,6 +127,7 @@ object Main extends IOApp:
        |  graph       Show the resolved dependency tree
        |  why NAME    Show every path introducing a dependency
        |  lock        Resolve dependencies and update sprout.lock
+       |  doctor      Diagnose project setup and build prerequisites
        |  setup-ide  Configure Metals and other BSP-compatible editors
        |
        |Options:

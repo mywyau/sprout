@@ -9,7 +9,6 @@ class ProjectLockSuite extends munit.FunSuite:
     val root = Files.createTempDirectory("sprout-project-lock")
 
     ProjectLock(root) {
-      intercept[SproutError.User](ProjectLock(root)(IO.unit).unsafeRunSync())
-      IO.unit
+      IO.delay(intercept[SproutError.User](ProjectLock(root)(IO.unit).unsafeRunSync()))
     }.unsafeRunSync()
   }
