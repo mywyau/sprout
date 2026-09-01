@@ -62,37 +62,39 @@ private[bsp] final class BspWorkspace(root: Path):
       resolver.resolveSources(value.scalaVersion, dependencies).map(_.paths)
   }
 
-  def compile(kind: TargetKind): IO[CompilationResult] = classpath(kind).flatMap { target =>
-    val sourceDirectories = kind match
-      case TargetKind.Main => target.project.layout.mainSources
-      case TargetKind.Test => target.project.layout.testSources
-    val resourceDirectories = kind match
-      case TargetKind.Main => target.project.layout.mainResources
-      case TargetKind.Test => target.project.layout.testResources
-    val compilationName = if kind == TargetKind.Main then "compile" else "test-compile"
-    SourceDiscovery.scalaSources(sourceDirectories).flatMap { sources =>
-      if sources.isEmpty then IO.pure(CompilationResult.UpToDate)
-      else
-        compiler(target.project, kind).compile(
-          CompilationRequest(
-            sources,
-            target.compileClasspath,
-            target.compiler,
-            target.outputDirectory,
-            target.project.scalaVersion,
-            semanticdbOptions(target.project),
-            incremental = Some(
-              IncrementalCompilation(
-                target.compilerBridge,
-                target.project.layout.zincDirectory(compilationName)
-              )
-            ),
-            resourceDirectories = resourceDirectories,
-            resourceStateDirectory =
-              Some(target.project.layout.resourceStateDirectory(compilationName))
+  def compile(kind: TargetKind): IO[CompilationResult] = project.flatMap { project =>
+    ProjectLock(project.layout.root)(classpath(kind).flatMap { target =>
+      val sourceDirectories = kind match
+        case TargetKind.Main => target.project.layout.mainSources
+        case TargetKind.Test => target.project.layout.testSources
+      val resourceDirectories = kind match
+        case TargetKind.Main => target.project.layout.mainResources
+        case TargetKind.Test => target.project.layout.testResources
+      val compilationName = if kind == TargetKind.Main then "compile" else "test-compile"
+      SourceDiscovery.scalaSources(sourceDirectories).flatMap { sources =>
+        if sources.isEmpty then IO.pure(CompilationResult.UpToDate)
+        else
+          compiler(target.project, kind).compile(
+            CompilationRequest(
+              sources,
+              target.compileClasspath,
+              target.compiler,
+              target.outputDirectory,
+              target.project.scalaVersion,
+              semanticdbOptions(target.project),
+              incremental = Some(
+                IncrementalCompilation(
+                  target.compilerBridge,
+                  target.project.layout.zincDirectory(compilationName)
+                )
+              ),
+              resourceDirectories = resourceDirectories,
+              resourceStateDirectory =
+                Some(target.project.layout.resourceStateDirectory(compilationName))
+            )
           )
-        )
-    }
+      }
+    })
   }
 
   def compileWithDependencies(kind: TargetKind): IO[CompilationResult] = kind match

@@ -19,24 +19,24 @@ final class BuildService(
   private lazy val applicationPackager = ApplicationPackager()
 
   def compile(from: Path): IO[CompilationResult] =
-    mainSession(from).flatMap(compileMain)
+    guarded(from)(mainSession(from).flatMap(compileMain))
 
   def run(from: Path, arguments: List[String]): IO[Unit] =
-    for
+    guarded(from)(for
       session <- mainSession(from)
       request <- mainCompilationRequest(session)
       _ <- compileMain(session, request).flatMap(reportCompilation)
       mainClass <- cachedMainClass(session, request)
       exit <- applicationRunner.run(mainClass, session.mainRuntimeClasspath, arguments)
       _ <- IO.raiseWhen(exit != 0)(SproutError.Process("Application", exit))
-    yield ()
+    yield ())
 
   def test(
       from: Path,
       selector: Option[String] = None,
       verbose: Boolean = true
   ): IO[TestResult] =
-    for
+    guarded(from)(for
       session <- sessionWithTests(from)
       testBuild <- IO.fromOption(session.test)(
         IllegalStateException("test build session was not initialised")
@@ -74,10 +74,10 @@ final class BuildService(
         if verbose then TestOutput.Verbose else TestOutput.Compact
       )
       _ <- IO.raiseWhen(result.failed > 0)(SproutError.User(s"${result.failed} test(s) failed"))
-    yield result
+    yield result)
 
   def packageApplication(from: Path): IO[ApplicationPackageResult] =
-    for
+    guarded(from)(for
       session <- mainSession(from)
       request <- mainCompilationRequest(session)
       _ <- compileMain(session, request).flatMap(reportCompilation)
@@ -93,13 +93,13 @@ final class BuildService(
           session.project.layout.packageDirectory
         )
       )
-    yield result
+    yield result)
 
   def clean(from: Path): IO[Unit] =
-    load(from).flatMap(project => deleteTree(project.layout.buildDirectory))
+    guarded(from)(load(from).flatMap(project => deleteTree(project.layout.buildDirectory)))
 
   def add(from: Path, coordinate: String, scope: DependencyScope): IO[AddedDependency] =
-    for
+    guarded(from)(for
       config <- ProjectConfig.locate(from)
       project <- ProjectConfig.load(config)
       dependency <- IO.fromEither(
@@ -111,35 +111,38 @@ final class BuildService(
         case DependencyScope.Test => project.testDependencies :+ dependency
       classpath <- resolving(resolver.resolve(project.scalaVersion, candidateDependencies))
       name <- ProjectConfigEditor.add(config, dependency)
-    yield AddedDependency(name, dependency, classpath.classpath.artifacts.size)
+    yield AddedDependency(name, dependency, classpath.classpath.artifacts.size))
 
   def remove(from: Path, name: String, scope: DependencyScope): IO[Unit] =
-    ProjectConfig.locate(from).flatMap(ProjectConfigEditor.remove(_, name, scope))
+    guarded(from)(ProjectConfig.locate(from).flatMap(ProjectConfigEditor.remove(_, name, scope)))
 
   def graph(from: Path): IO[String] =
-    resolvedMainDependencies(from).map { case (project, dependencies) =>
+    guarded(from)(resolvedMainDependencies(from).map { case (project, dependencies) =>
       DependencyReport.graph(project.name.value, dependencies.graph)
-    }
+    })
 
   def why(from: Path, name: String): IO[String] =
-    resolvedMainDependencies(from).flatMap { case (project, dependencies) =>
+    guarded(from)(resolvedMainDependencies(from).flatMap { case (project, dependencies) =>
       IO.fromEither(
         DependencyReport
           .why(project.name.value, dependencies.graph, name)
           .left
           .map(SproutError.User.apply)
       )
-    }
+    })
 
   def lock(from: Path): IO[Unit] =
-    for
+    guarded(from)(for
       project <- load(from)
       main <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
       test <- resolver.resolve(project.scalaVersion, project.testDependencies)
       _ <- Lockfile.write(project, main, test)
-    yield ()
+    yield ())
 
   private def load(from: Path): IO[Project] = ProjectConfig.locate(from).flatMap(ProjectConfig.load)
+
+  private def guarded[A](from: Path)(action: IO[A]): IO[A] =
+    load(from).flatMap(project => ProjectLock(project.layout.root)(action))
 
   private def resolvedMainDependencies(from: Path): IO[(Project, ResolvedDependencies)] =
     for
