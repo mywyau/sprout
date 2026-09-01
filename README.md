@@ -7,12 +7,6 @@ to feel closer to Cargo, npm, or uv than to a programmable build definition: put
 Sprout currently targets Scala 3 JVM, Maven Central, and single-module application and library
 projects. It delegates dependency resolution to Coursier and compilation to the Scala 3 compiler.
 
-## What Sprout is not
-
-Sprout is not an sbt replacement for every build, a task DSL, a compiler, a dependency resolver, or a
-universal JVM build system. The initial release deliberately excludes Scala 2, Scala.js, Scala Native,
-plugins, custom tasks, multi-module builds, cross-building, publishing, and remote caches.
-
 ## Install
 
 Sprout requires JDK 17 or newer, but users do not need Scala, Coursier, or sbt. Install with Homebrew:
@@ -41,16 +35,6 @@ Install a specific version or custom destination with:
 Windows users can download the release ZIP and add its `bin` directory to `PATH`; `sprout.cmd` uses
 `JAVA_HOME`, `SPROUT_JAVA_HOME`, or `java` from `PATH`.
 
-Upgrade a Homebrew installation after a new release with:
-
-```bash
-brew update
-brew upgrade sprout
-```
-
-To uninstall the script-based installation, remove `~/.local/bin/sprout` and
-`~/.local/share/sprout`. Coursier's dependency cache is independent and is deliberately retained.
-
 ## Build from source
 
 Contributors need JDK 17 or newer and sbt 1.11.6 or newer:
@@ -59,13 +43,6 @@ Contributors need JDK 17 or newer and sbt 1.11.6 or newer:
 sbt check cli/assembly
 export PATH="$PWD/bin:$PATH"
 sprout --help
-```
-
-Create the same archives published by CI with:
-
-```bash
-scripts/package-release.sh 0.1.0-SNAPSHOT
-scripts/test-distribution.sh 0.1.0-SNAPSHOT target/release
 ```
 
 ## Hello world
@@ -83,10 +60,10 @@ sprout package
 sprout clean
 ```
 
-`new` creates a conventional application and one MUnit test. Generated state stays under `.sprout/`;
-`clean` removes only that directory and leaves Coursier's global artifact cache intact.
+`new` creates a conventional application and one MUnit test. `sprout lock` writes the dependency lock;
+run it again after intentionally changing `sprout.toml`. Generated state stays under `.sprout/`.
 
-### Package for production
+## Package an application
 
 Create a self-contained application distribution after choosing a single main class:
 
@@ -100,20 +77,9 @@ The command writes a runnable directory, `.tar.gz` and `.zip` archives, and SHA-
 ordered runtime dependency JARs, resources, and metadata. Test dependencies are excluded. A target
 machine needs a compatible JRE, but it does not need Sprout, Scala, Coursier, or sbt.
 
-For example, after running `sprout package`, a minimal container image can copy the unpacked
-distribution directly:
-
-```dockerfile
-FROM eclipse-temurin:21-jre
-WORKDIR /opt/hello
-COPY .sprout/package/hello/ ./
-ENTRYPOINT ["./bin/hello"]
-```
-
-Sprout deliberately produces deployment inputs rather than building or publishing container images.
 See [application packaging](docs/packaging.md) for the layout and checksum commands.
 
-### VS Code and Metals
+## VS Code and Metals
 
 Install the Metals extension, then configure the current Sprout project once:
 
@@ -129,61 +95,12 @@ uses the Scala version, source roots, compiler options, and resolved dependency 
 current connection unchanged and atomically repairs one that is malformed or points to a different
 Sprout version or launcher. Re-run it after moving, upgrading, or reinstalling Sprout.
 
-## Try Sprout locally
+## Dependencies
 
-Create a disposable project outside the Sprout repository and exercise the installed command exactly
-as a user would:
-
-```bash
-workdir="$(mktemp -d)"
-cd "$workdir"
-
-sprout --version
-sprout new hello
-cd hello
-
-sprout lock
-sprout compile  # cold compilation
-sprout compile  # should report nothing to build
-sprout run
-sprout test
-sprout test --quiet
-sprout test MainSuite
-sprout test src/test/scala/MainSuite.scala
-sprout lock   # refresh the checked-in dependency lock after intentional changes
-sprout clean
-test ! -e .sprout
-```
-
-Next, test real dependency resolution. Add this to `sprout.toml`:
-
-```toml
-[dependencies]
-cats-effect = "org.typelevel::cats-effect:3.6.3"
-```
-
-Replace `src/main/scala/Main.scala` with:
-
-```scala
-import cats.effect.{IO, IOApp}
-
-object Main extends IOApp.Simple:
-  def run: IO[Unit] = IO.println("Cats Effect resolved by Sprout")
-```
-
-Run `sprout lock`, then run `sprout run` twice. The first run should compile; the second should reuse downloaded
-artifacts and unchanged classes. Also introduce a deliberate type error and confirm that Sprout keeps
-the compiler's file and line information without printing an internal stack trace. Use `--debug` to
-verify that deeper diagnostics remain available when requested.
-
-Add dependencies without editing TOML by hand:
+Add or remove dependencies without editing TOML by hand, then refresh the lock:
 
 ```bash
 sprout add org.typelevel::cats-effect:3.6.3
-sprout lock
-sprout remove cats-effect
-sprout lock
-sprout remove --test munit
 sprout lock
 sprout add --test org.scalameta::munit:1.1.1
 sprout lock
@@ -193,7 +110,7 @@ sprout lock
 coordinates. Sprout resolves an addition before atomically updating `sprout.toml`, so an unavailable
 version leaves the configuration unchanged. Dependency names default to the artifact name.
 
-Inspect the selected dependency graph and find everything that introduces a transitive dependency:
+Inspect the selected dependency graph or find every path to a transitive dependency:
 
 ```bash
 sprout graph
@@ -205,7 +122,7 @@ requested and selected versions when Coursier resolves a conflict. `why` prints 
 direct dependency to the requested module. Use `organisation:artifact` if a short artifact name is
 ambiguous.
 
-## Configuration
+## Configuration and layout
 
 Sprout projects use declarative TOML and never execute build code:
 
@@ -233,8 +150,7 @@ src/test/scala       src/test/resources
 ```
 
 Resources are copied into `.sprout/classes` and `.sprout/test-classes` with the compiled output.
-They are therefore available through the normal JVM classpath to `run` and `test`, and main resources
-are included in the application JAR produced by `sprout package`.
+They are available to `run` and `test`, and main resources are included in application packages.
 
 ## Commands
 
@@ -244,89 +160,20 @@ are included in the application JAR produced by `sprout package`.
 | `sprout new NAME` | Generate an application and MUnit test |
 | `sprout compile` | Resolve and compile main sources |
 | `sprout run [ARGS]` | Compile, detect one main class, and run it |
-| `sprout test [--quiet] [SUITE_OR_FILE]` | Compile tests and run all or one MUnit suite; use `--quiet` for summary-only output |
+| `sprout test [--quiet] [SUITE_OR_FILE]` | Compile and run MUnit or ScalaTest suites; use `--quiet` for summary-only output |
 | `sprout package` | Create a runnable application directory, archives, and checksums |
 | `sprout clean` | Delete project-local `.sprout/` state |
 | `sprout add [--test] COORDINATE` | Resolve and add a main or test dependency |
 | `sprout remove [--test] NAME` | Remove a main or test dependency |
 | `sprout graph` | Show the resolved main dependency tree |
 | `sprout why NAME` | Show every path introducing a main dependency |
+| `sprout lock` | Resolve dependencies and update `sprout.lock` |
 | `sprout setup-ide` | Install the BSP connection used by Metals-compatible editors |
 
 Pass `--debug` with a command to include stack traces for unexpected failures. Normal configuration,
 resolution, and compilation failures remain compact and actionable.
 
-## Development
-
-```bash
-sbt test
-sbt check
-```
-
-Real integration fixtures cover a basic app, Coursier dependency resolution, Zinc single-source
-recompilation and corrupt-analysis recovery, a compiler error, and an MUnit project. CI additionally
-installs a packaged Sprout archive into a temporary location and
-exercises `new`, dependency editing and diagnostics, BSP setup and compilation, SemanticDB
-generation, `run`, `test`, application packaging, packaged execution, checksum verification, and
-`clean`.
-`benchmarks/measure.sh` provides coarse startup, cold, warm, no-change, and single-file-change
-measurements intended for tracking trends, not claims.
-
-## Maintainer release process
-
-Normal releases are driven by semantic version tags. The version is injected into the assembled jar
-from the tag, so `build.sbt` does not need a manual release-version edit.
-
-Before tagging, test the intended commit and push it to `main`:
-
-```bash
-sbt check
-git push origin main
-```
-
-Wait for the `CI` workflow to pass, then create a new tag. Never reuse or move a published tag:
-
-```bash
-git tag v0.1.2
-git push origin v0.1.2
-```
-
-The `Release` workflow then:
-
-1. Tests and assembles Sprout with the tag-derived version.
-2. Creates archives, checksums, the installer, and a Homebrew formula.
-3. Installs the packaged archive and exercises BSP setup/import/compilation, `new`, `run`, `test`,
-   application packaging, packaged execution, checksum verification, and `clean`.
-4. Publishes or refreshes the GitHub release assets.
-5. Commits the formula to `mywyau/homebrew-tap` when it changed.
-
-Watch and verify the release with:
-
-```bash
-gh run watch --repo mywyau/sprout
-brew update
-brew upgrade sprout
-sprout --version
-brew info mywyau/tap/sprout
-```
-
-Homebrew publication requires the `HOMEBREW_TAP_TOKEN` Actions secret. It must be a fine-grained token
-limited to `mywyau/homebrew-tap` with `Contents: read and write` and `Metadata: read`. Rotate it before
-expiry and update the secret without committing its value:
-
-```bash
-gh secret set HOMEBREW_TAP_TOKEN --repo mywyau/sprout
-```
-
-The release workflow is safe to rerun after a partial failure: existing assets are replaced and an
-unchanged Homebrew formula does not produce an empty commit. See the full
-[release guide](docs/releasing.md) for details.
-
-See [architecture](docs/architecture.md), [roadmap](docs/roadmap.md),
-[performance](docs/performance.md), [application packaging](docs/packaging.md), and
-[release process](docs/releasing.md) for design details and current direction.
-
-## Current limitations
+## Limits and details
 
 Compilation caching skips an unchanged compilation using content fingerprints for sources, ordered
 dependency and compiler classpaths, compiler bridge, Scala version, compiler options, JVM target, and
@@ -340,3 +187,10 @@ Dependency diagnostics currently cover the main scope; test-scope graph queries 
 BSP currently covers editor import, dependency sources, and compilation but not editor run, test, or
 debug requests. There is no daemon, library publishing, container-image creation, or multi-module
 support yet.
+
+Sprout deliberately does not support Scala 2, Scala.js, Scala Native, custom tasks, plugins,
+cross-building, publishing, or remote caches.
+
+See the [architecture](docs/architecture.md), [roadmap](docs/roadmap.md),
+[performance notes](docs/performance.md), [packaging guide](docs/packaging.md), and
+[release guide](docs/releasing.md) for contributor and maintainer details.
