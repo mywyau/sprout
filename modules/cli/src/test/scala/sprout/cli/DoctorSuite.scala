@@ -65,7 +65,7 @@ class DoctorSuite extends munit.FunSuite:
       ResolvedClasspath(Nil),
       ResolvedDependencyGraph(Nil, Nil)
     )
-    Lockfile.write(project, empty, empty).unsafeRunSync()
+    Lockfile.write(project, empty, empty, empty).unsafeRunSync()
     Files.writeString(
       root.resolve("sprout.toml"),
       """[project]

@@ -19,12 +19,16 @@ class ProjectConfigSuite extends munit.FunSuite:
         |
         |[test-dependencies]
         |munit = "org.scalameta::munit:1.1.1"
+        |
+        |[tools]
+        |scalafmt = "org.scalameta:scalafmt-cli_2.13:3.9.10"
         |""".stripMargin
     )
     val project = ProjectConfig.load(file).unsafeRunSync()
     assertEquals(project.name.value, "sample")
     assertEquals(project.dependencies.size, 2)
     assertEquals(project.testDependencies.size, 2)
+    assertEquals(project.tools.map(_.name), List("scalafmt"))
     assertEquals(project.layout.mainSources, List(root.resolve("src/main/scala")))
   }
 

@@ -128,10 +128,13 @@ final case class Project(
     name: ProjectName,
     scalaVersion: ScalaVersion,
     dependencies: List[Dependency],
-    layout: ProjectLayout
+    layout: ProjectLayout,
+    tools: List[ExternalTool] = Nil
 ):
   def mainDependencies: List[Dependency] = dependencies.filter(_.scope == DependencyScope.Main)
   def testDependencies: List[Dependency] = dependencies
+
+final case class ExternalTool(name: String, dependency: Dependency, mainClass: String)
 
 final case class ResolvedArtifact(module: String, version: String, file: Path)
 final case class ResolvedClasspath(artifacts: List[ResolvedArtifact]):

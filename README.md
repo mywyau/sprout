@@ -136,11 +136,19 @@ cats-effect = "org.typelevel::cats-effect:3.6.3"
 
 [test-dependencies]
 munit = "org.scalameta::munit:1.1.1"
+
+[tools]
+scalafmt = "org.scalameta:scalafmt-cli_2.13:3.9.10"
 ```
 
 `organisation::artifact:version` is Scala-aware and resolves an artifact such as `cats-effect_3`.
 Use one colon for an ordinary Maven artifact. Exact Scala versions are required so builds cannot
 silently change underneath the project.
+
+Tools are external JVM applications, not libraries bundled into Sprout. Configure an exact Maven
+coordinate, run `sprout lock`, then use `sprout fmt` or `sprout fmt --check`. Their resolved
+artifacts and checksums are recorded in `sprout.lock`, so replacing or removing a tool does not
+couple your build to a Sprout release.
 
 The default layout is:
 
@@ -168,6 +176,7 @@ They are available to `run` and `test`, and main resources are included in appli
 | `sprout graph` | Show the resolved main dependency tree |
 | `sprout why NAME` | Show every path introducing a main dependency |
 | `sprout lock` | Resolve dependencies and update `sprout.lock` |
+| `sprout fmt [--check]` | Run the configured external Scalafmt tool, or verify formatting |
 | `sprout doctor` | Diagnose JDK, lockfile, cache, permissions, project layout, and BSP setup |
 | `sprout setup-ide` | Install the BSP connection used by Metals-compatible editors |
 

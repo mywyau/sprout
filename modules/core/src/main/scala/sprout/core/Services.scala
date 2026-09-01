@@ -11,6 +11,12 @@ trait DependencyResolver[F[_]]:
   ): F[ResolvedDependencies] = resolve(scalaVersion, dependencies)
   def compilerClasspath(scalaVersion: ScalaVersion): F[ResolvedClasspath]
   def compilerBridge(scalaVersion: ScalaVersion): F[Path]
+  def resolveTool(dependency: Dependency): F[ResolvedDependencies] =
+    resolve(ScalaVersion.from("3.3.6").toOption.get, List(dependency))
+  def resolveToolLocked(
+      dependency: Dependency,
+      locked: List[LockedModule]
+  ): F[ResolvedDependencies] = resolveTool(dependency)
 
 trait ScalaCompiler[F[_]]:
   def compile(request: CompilationRequest): F[CompilationResult]

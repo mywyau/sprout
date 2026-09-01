@@ -104,6 +104,15 @@ class CliSuite extends munit.FunSuite:
     assertEquals(Cli.parse(List("doctor", "extra")), Left("Usage: sprout doctor"))
   }
 
+  test("parses Scalafmt commands") {
+    assertEquals(Cli.parse(List("fmt")), Right(CliInvocation(CliCommand.Format(false), false)))
+    assertEquals(
+      Cli.parse(List("fmt", "--check")),
+      Right(CliInvocation(CliCommand.Format(true), false))
+    )
+    assertEquals(Cli.parse(List("fmt", "--write")), Left("Usage: sprout fmt [--check]"))
+  }
+
   test("parses package without accepting build-script arguments") {
     assertEquals(Cli.parse(List("package")), Right(CliInvocation(CliCommand.Package, false)))
     assertEquals(Cli.parse(List("package", "anything")), Left("Usage: sprout package"))

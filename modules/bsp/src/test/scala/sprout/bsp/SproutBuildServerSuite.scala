@@ -129,7 +129,7 @@ class SproutBuildServerSuite extends munit.FunSuite:
     val resolver = CoursierDependencyResolver()
     val main = resolver.resolve(project.scalaVersion, project.mainDependencies).unsafeRunSync()
     val test = resolver.resolve(project.scalaVersion, project.testDependencies).unsafeRunSync()
-    Lockfile.write(project, main, test).unsafeRunSync()
+    Lockfile.write(project, main, test, main).unsafeRunSync()
 
 private final class RecordingBuildClient extends BuildClient:
   val diagnostics = CopyOnWriteArrayList[PublishDiagnosticsParams]()

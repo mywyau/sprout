@@ -31,11 +31,13 @@ object ProjectConfig:
       required(projectTable, "scala").flatMap(ScalaVersion.from).fold(fail(path), identity)
     val main = dependencies(Option(toml.getTable("dependencies")), DependencyScope.Main, path)
     val test = dependencies(Option(toml.getTable("test-dependencies")), DependencyScope.Test, path)
+    val tools = externalTools(Option(toml.getTable("tools")), path)
     Project(
       name,
       version,
       main ++ test,
-      ProjectLayout.conventional(path.toAbsolutePath.normalize.getParent)
+      ProjectLayout.conventional(path.toAbsolutePath.normalize.getParent),
+      tools
     )
 
   private def required(table: TomlTable, key: String): Either[String, String] =
@@ -54,6 +56,23 @@ object ProjectConfig:
             .fold(message => throw SproutError.Configuration(path, message), identity)
         case _ =>
           throw SproutError.Configuration(path, s"dependency '${entry.getKey}' must be a string")
+    })
+
+  private def externalTools(table: Option[TomlTable], path: Path): List[ExternalTool] =
+    table.toList.flatMap(_.entrySet.asScala.toList.sortBy(_.getKey).map { entry =>
+      val dependency = entry.getValue match
+        case value: String =>
+          Dependency
+            .parse(value, DependencyScope.Main)
+            .fold(message => throw SproutError.Configuration(path, message), identity)
+        case _ => throw SproutError.Configuration(path, s"tool '${entry.getKey}' must be a string")
+      entry.getKey match
+        case "scalafmt" if dependency.crossVersion == CrossVersion.None =>
+          ExternalTool("scalafmt", dependency, "org.scalafmt.cli.Cli")
+        case "scalafmt" =>
+          throw SproutError
+            .Configuration(path, "tool 'scalafmt' must use an ordinary Maven coordinate")
+        case name => throw SproutError.Configuration(path, s"unsupported tool '$name'")
     })
 
   private def fail[A](path: Path)(details: String): A =

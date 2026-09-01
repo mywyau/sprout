@@ -91,6 +91,13 @@ class BuildIntegrationSuite extends munit.FunSuite:
     intercept[SproutError.User](service.compile(project).unsafeRunSync())
   }
 
+  test("runs configured Scalafmt as a locked external tool") {
+    val project = copyFixture("scalafmt-app")
+
+    service.format(project, check = false).unsafeRunSync()
+    service.format(project, check = true).unsafeRunSync()
+  }
+
   test("rejects resources that collide with compiled class output") {
     val project = copyFixture("hello-world")
     val resources = Files.createDirectories(project.resolve("src/main/resources"))

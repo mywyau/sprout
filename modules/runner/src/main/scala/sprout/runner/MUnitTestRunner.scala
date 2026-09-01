@@ -7,7 +7,9 @@ import java.io.{ByteArrayOutputStream, PrintStream}
 import java.net.URLClassLoader
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
+import java.util.jar.JarFile
 import scala.jdk.CollectionConverters.*
+import scala.util.control.NonFatal
 
 final class MUnitTestRunner extends TestRunner[IO]:
   def run(
@@ -22,15 +24,18 @@ final class MUnitTestRunner extends TestRunner[IO]:
       var total = 0
       var failed = 0
       val capturedOutput = captureSuccessfulOutput(output) {
-        val frameworks = FrameworkDefinition.available(loader)
+        val frameworks = FrameworkDefinition.available(loader, classpath)
         val candidates = frameworks.flatMap { definition =>
-          val suiteClass = loader.loadClass(definition.suiteClass)
-          classDirectories.flatMap(classNames).distinct.sorted.collect {
-            case name if suiteClass.isAssignableFrom(loader.loadClass(name)) => definition -> name
+          classDirectories.flatMap(classNames).distinct.sorted.flatMap { name =>
+            val suite = loader.loadClass(name)
+            definition.framework.fingerprints.toList.collect {
+              case fingerprint if matches(fingerprint, suite) =>
+                RunnableSuite(definition, fingerprint, name)
+            }
           }
         }
-        val selected = selectSuites(candidates.map(_._2), selection).toSet
-        val runnable = candidates.filter((_, name) => selected.contains(name))
+        val selected = selectSuites(candidates.map(_.name), selection).toSet
+        val runnable = candidates.filter(candidate => selected.contains(candidate.name))
         if runnable.isEmpty then throw SproutError.User("No supported test suites found")
         val handler = new EventHandler:
           def handle(event: Event): Unit =
@@ -45,23 +50,20 @@ final class MUnitTestRunner extends TestRunner[IO]:
           def info(message: String): Unit = if output == TestOutput.Verbose then println(message)
           def debug(message: String): Unit = ()
           def trace(throwable: Throwable): Unit = throwable.printStackTrace()
-        runnable.groupMap(_._1)(_._2).foreach { case (definition, names) =>
-          val framework = definition.create(loader)
-          val runner = framework.runner(Array.empty, Array.empty, loader)
-          val fingerprint = new SubclassFingerprint:
-            def isModule(): Boolean = false
-            def requireNoArgConstructor(): Boolean = true
-            def superclassName(): String = definition.suiteClass
-          var tasks = runner
-            .tasks(
-              names
-                .map(name => new TaskDef(name, fingerprint, false, Array(new SuiteSelector)))
-                .toArray
-            )
-            .toList
-          while tasks.nonEmpty do tasks = tasks.flatMap(_.execute(handler, Array(logger)))
-          runner.done()
-        }
+        runnable
+          .groupMap(candidate => (candidate.definition, candidate.fingerprint))(_.name)
+          .foreach { case ((definition, fingerprint), names) =>
+            val runner = definition.framework.runner(Array.empty, Array.empty, loader)
+            var tasks = runner
+              .tasks(
+                names
+                  .map(name => new TaskDef(name, fingerprint, false, Array(new SuiteSelector)))
+                  .toArray
+              )
+              .toList
+            while tasks.nonEmpty do tasks = tasks.flatMap(_.execute(handler, Array(logger)))
+            runner.done()
+          }
       }
       if failed > 0 && capturedOutput.nonEmpty then System.err.print(capturedOutput)
       TestResult(total, failed)
@@ -97,7 +99,7 @@ final class MUnitTestRunner extends TestRunner[IO]:
           else candidates.filter(_.split('.').lastOption.contains(name))
         selected match
           case Nil =>
-            throw SproutError.User(s"No MUnit suite matches '$name'")
+            throw SproutError.User(s"No test suite matches '$name'")
           case suite :: Nil => List(suite)
           case many         =>
             throw SproutError.User(
@@ -112,6 +114,21 @@ final class MUnitTestRunner extends TestRunner[IO]:
     System.err.println(s"${event.fullyQualifiedName}$selector: ${event.status}")
     val throwable = event.throwable
     if throwable.isDefined then throwable.get.printStackTrace()
+
+  private def matches(fingerprint: Fingerprint, suite: Class[?]): Boolean = fingerprint match
+    case value: SubclassFingerprint =>
+      if value.isModule() || value.superclassName() == null then false
+      else
+        try
+          val parent = suite.getClassLoader.loadClass(value.superclassName())
+          parent.isAssignableFrom(suite) &&
+          (!value.requireNoArgConstructor() || suite.getDeclaredConstructors.exists(
+            _.getParameterCount == 0
+          ))
+        catch case _: ClassNotFoundException => false
+    case value: AnnotatedFingerprint =>
+      suite.getAnnotations.exists(_.annotationType.getName == value.annotationName())
+    case _ => false
 
   private def captureSuccessfulOutput(output: TestOutput)(run: => Unit): String =
     if output == TestOutput.Verbose then
@@ -135,21 +152,64 @@ final class MUnitTestRunner extends TestRunner[IO]:
 object MUnitTestRunner:
   private val outputLock = new Object
 
-private final case class FrameworkDefinition(factoryClass: String, suiteClass: String):
-  def create(loader: ClassLoader): Framework =
-    loader.loadClass(factoryClass).getDeclaredConstructor().newInstance().asInstanceOf[Framework]
+private final case class FrameworkDefinition(factoryClass: String, framework: Framework)
+private final case class RunnableSuite(
+    definition: FrameworkDefinition,
+    fingerprint: Fingerprint,
+    name: String
+)
 
 private object FrameworkDefinition:
-  private val Supported = List(
-    FrameworkDefinition("munit.Framework", "munit.Suite"),
-    FrameworkDefinition("org.scalatest.tools.Framework", "org.scalatest.Suite")
-  )
-
-  def available(loader: ClassLoader): List[FrameworkDefinition] =
-    Supported.filter { definition =>
+  def available(loader: ClassLoader, classpath: List[Path]): List[FrameworkDefinition] =
+    val services = java.util.ServiceLoader.load(classOf[Framework], loader).iterator.asScala.toList
+    val scanned = classpath.flatMap(frameworkClasses).flatMap { name =>
       try
-        loader.loadClass(definition.factoryClass)
-        loader.loadClass(definition.suiteClass)
-        true
-      catch case _: ClassNotFoundException => false
+        val candidate = loader.loadClass(name)
+        Option.when(
+          classOf[Framework].isAssignableFrom(candidate) &&
+            !java.lang.reflect.Modifier.isAbstract(candidate.getModifiers)
+        ) {
+          candidate.getDeclaredConstructor().newInstance().asInstanceOf[Framework]
+        }
+      catch case NonFatal(_) => None
     }
+    (services ++ scanned ++ Known.flatMap(instantiate(loader, _)))
+      .groupBy(_.getClass.getName)
+      .values
+      .map(_.head)
+      .toList
+      .sortBy(_.getClass.getName)
+      .map(framework => FrameworkDefinition(framework.getClass.getName, framework))
+
+  private val Known = List("munit.Framework", "org.scalatest.tools.Framework")
+
+  private def instantiate(loader: ClassLoader, name: String): Option[Framework] =
+    try Some(loader.loadClass(name).getDeclaredConstructor().newInstance().asInstanceOf[Framework])
+    catch case NonFatal(_) => None
+
+  private def frameworkClasses(path: Path): List[String] =
+    if Files.isDirectory(path) then
+      val stream = Files.walk(path)
+      try
+        stream.iterator.asScala
+          .filter(value =>
+            Files.isRegularFile(value) && value.getFileName.toString.endsWith("Framework.class")
+          )
+          .map(value =>
+            path
+              .relativize(value)
+              .toString
+              .stripSuffix(".class")
+              .replace(java.io.File.separatorChar, '.')
+          )
+          .toList
+      finally stream.close()
+    else
+      val jar = new JarFile(path.toFile)
+      try
+        jar.entries.asScala
+          .filter(entry => !entry.isDirectory && entry.getName.endsWith("Framework.class"))
+          .map(_.getName.stripSuffix(".class").replace('/', '.'))
+          .toList
+      catch case NonFatal(_) => Nil
+      finally jar.close()

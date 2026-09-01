@@ -23,9 +23,9 @@ class LockfileSuite extends munit.FunSuite:
       )
     )
 
-    Lockfile.write(project, resolved, resolved).unsafeRunSync()
+    Lockfile.write(project, resolved, resolved, resolved).unsafeRunSync()
     val first = Files.readString(root.resolve("sprout.lock"))
-    Lockfile.write(project, resolved, resolved).unsafeRunSync()
+    Lockfile.write(project, resolved, resolved, resolved).unsafeRunSync()
     assertEquals(Files.readString(root.resolve("sprout.lock")), first)
     Lockfile
       .verify(project, resolved, resolved, Lockfile.load(project).unsafeRunSync().get)

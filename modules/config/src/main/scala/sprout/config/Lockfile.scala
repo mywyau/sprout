@@ -16,12 +16,13 @@ import scala.util.control.NonFatal
 final case class DependencyLock private[config] (
     input: String,
     main: String,
-    test: String
+    test: String,
+    tools: String
 )
 
 object Lockfile:
   val FileName = "sprout.lock"
-  private val Header = "sprout-lock-v1"
+  private val Header = "sprout-lock-v2"
 
   def path(project: Project): Path = project.layout.root.resolve(FileName)
 
@@ -42,13 +43,15 @@ object Lockfile:
   def write(
       project: Project,
       main: ResolvedDependencies,
-      test: ResolvedDependencies
+      test: ResolvedDependencies,
+      tools: ResolvedDependencies
   ): IO[Unit] = IO.blocking {
     val content = List(
       Header,
       "input=" + encode(input(project)),
       "main=" + encode(snapshot(main)),
       "test=" + encode(snapshot(test)),
+      "tools=" + encode(snapshot(tools)),
       ""
     ).mkString("\n")
     replaceAtomically(path(project), content)
@@ -75,12 +78,20 @@ object Lockfile:
       if lock.input != input(project) || lock.test != snapshot(test) then stale()
     }
 
+  def verifyTools(project: Project, tools: ResolvedDependencies, lock: DependencyLock): IO[Unit] =
+    IO.blocking {
+      val expected = toolArtifacts(project, lock.tools)
+      val actual = toolArtifacts(project, tools)
+      if lock.input != input(project) || expected.isEmpty || expected != actual then stale()
+    }
+
   def verifyInput(project: Project, lock: DependencyLock): IO[Unit] = IO.blocking {
     if lock.input != input(project) then stale()
   }
 
   def mainModules(lock: DependencyLock): List[LockedModule] = modules(lock.main)
   def testModules(lock: DependencyLock): List[LockedModule] = modules(lock.test)
+  def toolModules(lock: DependencyLock): List[LockedModule] = modules(lock.tools)
 
   private def stale(): Nothing =
     throw SproutError.User(
@@ -99,7 +110,9 @@ object Lockfile:
           dependency.crossVersion.toString
         ).mkString("\u0000")
       )
-    (("scala=" + project.scalaVersion.value) :: values.map(value => "dependency=" + value))
+    val tools =
+      project.tools.sortBy(_.name).map(tool => s"tool=${tool.name}\u0000${tool.dependency.display}")
+    (("scala=" + project.scalaVersion.value) :: values.map(value => "dependency=" + value) ++ tools)
       .mkString("\n")
 
   private def snapshot(dependencies: ResolvedDependencies): String =
@@ -119,6 +132,28 @@ object Lockfile:
         s"relation\t${relation.parent.map(_.id).getOrElse("")}\t${relation.child.id}\t${relation.requestedVersion}\t${relation.selectedVersion}"
       )
     (modules ++ relations).mkString("\n")
+
+  private def toolArtifacts(project: Project, snapshot: String): List[String] =
+    val direct = project.tools
+      .map(tool => s"${tool.dependency.organisation.value}:${tool.dependency.artifact.value}")
+      .toSet
+    snapshot.linesIterator
+      .filter { line =>
+        line.split("\\t", -1).toList match
+          case "module" :: module :: _ => direct.contains(module)
+          case _                       => false
+      }
+      .toList
+      .sorted
+
+  private def toolArtifacts(project: Project, dependencies: ResolvedDependencies): List[String] =
+    val direct = project.tools
+      .map(tool => s"${tool.dependency.organisation.value}:${tool.dependency.artifact.value}")
+      .toSet
+    dependencies.classpath.artifacts
+      .filter(artifact => direct.contains(artifact.module))
+      .map(artifact => s"module\t${artifact.module}\t${artifact.version}\t${sha256(artifact.file)}")
+      .sorted
 
   private def modules(snapshot: String): List[LockedModule] =
     snapshot.linesIterator
@@ -150,7 +185,7 @@ object Lockfile:
 
   private def decode(lines: List[String]): Option[DependencyLock] =
     lines match
-      case header :: input :: main :: test :: _ if header == Header =>
+      case header :: input :: main :: test :: tools :: _ if header == Header =>
         for
           inputValue <- input.stripPrefix("input=") match
             case value if value != input => decodeValue(value)
@@ -161,7 +196,10 @@ object Lockfile:
           testValue <- test.stripPrefix("test=") match
             case value if value != test => decodeValue(value)
             case _                      => None
-        yield DependencyLock(inputValue, mainValue, testValue)
+          toolsValue <- tools.stripPrefix("tools=") match
+            case value if value != tools => decodeValue(value)
+            case _                       => None
+        yield DependencyLock(inputValue, mainValue, testValue, toolsValue)
       case _ => None
 
   private def encode(value: String): String =

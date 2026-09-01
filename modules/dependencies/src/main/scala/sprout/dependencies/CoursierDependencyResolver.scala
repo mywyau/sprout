@@ -50,6 +50,27 @@ final class CoursierDependencyResolver extends DependencyResolver[IO]:
       .fold(message => throw IllegalArgumentException(message), identity)
     fetch(scalaVersion, List(compiler), Nil).map(_.classpath)
 
+  override def resolveTool(dependency: Dependency): IO[ResolvedDependencies] =
+    fetch(toolScalaVersion, List(dependency), List(dependency)).map { result =>
+      ResolvedDependencies(result.classpath, graph(result, List(dependency), toolScalaVersion))
+    }
+
+  override def resolveToolLocked(
+      dependency: Dependency,
+      locked: List[LockedModule]
+  ): IO[ResolvedDependencies] =
+    val exact = locked.map { entry =>
+      Dependency
+        .parse(
+          s"${entry.module.organisation}:${entry.module.name}:${entry.version}",
+          DependencyScope.Main
+        )
+        .fold(message => throw IllegalArgumentException(message), identity)
+    }
+    fetch(toolScalaVersion, exact, List(dependency)).map { result =>
+      ResolvedDependencies(result.classpath, graph(result, List(dependency), toolScalaVersion))
+    }
+
   def compilerBridge(scalaVersion: ScalaVersion): IO[java.nio.file.Path] =
     val bridge = Dependency
       .parse(s"org.scala-lang:scala3-sbt-bridge:${scalaVersion.value}", DependencyScope.Main)
@@ -187,3 +208,5 @@ final class CoursierDependencyResolver extends DependencyResolver[IO]:
       direct: List[CoreDependency],
       artifacts: List[(ResolvedModule, java.nio.file.Path)]
   )
+
+  private val toolScalaVersion = ScalaVersion.from("3.3.6").toOption.get

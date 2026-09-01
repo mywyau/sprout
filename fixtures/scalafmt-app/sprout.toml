@@ -1,0 +1,6 @@
+[project]
+name = "scalafmt-app"
+scala = "3.3.6"
+
+[tools]
+scalafmt = "org.scalameta:scalafmt-cli_2.13:3.9.10"

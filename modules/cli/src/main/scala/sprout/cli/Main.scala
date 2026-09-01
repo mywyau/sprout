@@ -85,6 +85,12 @@ object Main extends IOApp:
       case CliCommand.Why(name) => service.why(Path.of("."), name).flatMap(IO.println)
       case CliCommand.Lock      =>
         service.lock(Path.of(".")).flatMap(_ => IO.println("✓ Updated sprout.lock"))
+      case CliCommand.Format(check) =>
+        service
+          .format(Path.of("."), check)
+          .flatMap(_ =>
+            IO.println(if check then "✓ Formatting verified" else "✓ Formatted sources")
+          )
       case CliCommand.Doctor =>
         service.doctor(Path.of(".")).flatMap { report =>
           IO.println(report.render) *>
@@ -127,6 +133,8 @@ object Main extends IOApp:
        |  graph       Show the resolved dependency tree
        |  why NAME    Show every path introducing a dependency
        |  lock        Resolve dependencies and update sprout.lock
+       |  fmt [--check]
+       |              Format sources with configured Scalafmt, or verify formatting
        |  doctor      Diagnose project setup and build prerequisites
        |  setup-ide  Configure Metals and other BSP-compatible editors
        |

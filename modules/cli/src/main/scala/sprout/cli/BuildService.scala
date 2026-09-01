@@ -136,12 +136,39 @@ final class BuildService(
       project <- load(from)
       main <- resolving(resolver.resolve(project.scalaVersion, project.mainDependencies))
       test <- resolver.resolve(project.scalaVersion, project.testDependencies)
-      _ <- Lockfile.write(project, main, test)
+      tools <- resolveTools(project)
+      _ <- Lockfile.write(project, main, test, tools)
     yield ())
 
   def doctor(from: Path): IO[DoctorReport] = Doctor.inspect(from)
 
+  def format(from: Path, check: Boolean): IO[Unit] =
+    guarded(from)(for
+      project <- load(from)
+      tool <- IO.fromOption(project.tools.find(_.name == "scalafmt"))(
+        SproutError.User(
+          "Scalafmt is not configured; add [tools] scalafmt = \"org.scalameta:scalafmt-cli_2.13:VERSION\""
+        )
+      )
+      lock <- Lockfile.require(project).flatTap(Lockfile.verifyInput(project, _))
+      resolved <- resolver.resolveToolLocked(tool.dependency, Lockfile.toolModules(lock))
+      _ <- Lockfile.verifyTools(project, resolved, lock)
+      _ <- ToolRunner.run(
+        tool,
+        resolved.classpath.paths,
+        project.layout.root,
+        if check then List("--check") else Nil
+      )
+    yield ())
+
   private def load(from: Path): IO[Project] = ProjectConfig.locate(from).flatMap(ProjectConfig.load)
+
+  private def resolveTools(project: Project): IO[ResolvedDependencies] =
+    project.tools match
+      case Nil =>
+        IO.pure(ResolvedDependencies(ResolvedClasspath(Nil), ResolvedDependencyGraph(Nil, Nil)))
+      case tool :: Nil => resolver.resolveTool(tool.dependency)
+      case _ => IO.raiseError(SproutError.User("Only one external tool is currently supported"))
 
   private def guarded[A](from: Path)(action: IO[A]): IO[A] =
     load(from).flatMap(project => ProjectLock(project.layout.root)(action))
