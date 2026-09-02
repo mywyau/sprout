@@ -25,12 +25,19 @@ final class MUnitTestRunner extends TestRunner[IO]:
       var failed = 0
       val capturedOutput = captureSuccessfulOutput(output) {
         val frameworks = FrameworkDefinition.available(loader, classpath)
+        val suites = classDirectories
+          .flatMap(classNames)
+          .groupBy(_.name)
+          .values
+          .map(_.maxBy(_.isModule))
+          .toList
+          .sortBy(_.name)
         val discovered = frameworks.flatMap { definition =>
-          classDirectories.flatMap(classNames).distinct.sorted.flatMap { name =>
-            val suite = loader.loadClass(name)
+          suites.flatMap { candidate =>
+            val suite = loader.loadClass(candidate.className)
             definition.framework.fingerprints.toList.collect {
-              case fingerprint if matches(fingerprint, suite) =>
-                RunnableSuite(definition, fingerprint, name)
+              case fingerprint if matches(fingerprint, suite, candidate.isModule) =>
+                RunnableSuite(definition, fingerprint, candidate.name, candidate.isModule)
             }
           }
         }
@@ -58,13 +65,15 @@ final class MUnitTestRunner extends TestRunner[IO]:
           def debug(message: String): Unit = ()
           def trace(throwable: Throwable): Unit = throwable.printStackTrace()
         runnable
-          .groupMap(candidate => (candidate.definition, candidate.fingerprint))(_.name)
-          .foreach { case ((definition, fingerprint), names) =>
+          .groupMap(candidate => (candidate.definition, candidate.fingerprint, candidate.isModule))(
+            _.name
+          )
+          .foreach { case ((definition, fingerprint, isModule), names) =>
             val runner = definition.framework.runner(Array.empty, Array.empty, loader)
             var tasks = runner
               .tasks(
                 names
-                  .map(name => new TaskDef(name, fingerprint, false, Array(new SuiteSelector)))
+                  .map(name => new TaskDef(name, fingerprint, isModule, Array(new SuiteSelector)))
                   .toArray
               )
               .toList
@@ -77,23 +86,21 @@ final class MUnitTestRunner extends TestRunner[IO]:
     finally loader.close()
   }
 
-  private def classNames(root: Path): List[String] =
+  private def classNames(root: Path): List[SuiteClass] =
     if !Files.isDirectory(root) then Nil
     else
       val stream = Files.walk(root)
       try
         stream.iterator.asScala
-          .filter(path =>
-            Files.isRegularFile(path) && path.toString
-              .endsWith(".class") && !path.getFileName.toString.contains("$")
-          )
-          .map(path =>
-            root
-              .relativize(path)
-              .toString
-              .stripSuffix(".class")
-              .replace(java.io.File.separatorChar, '.')
-          )
+          .filter(path => Files.isRegularFile(path) && path.toString.endsWith(".class"))
+          .flatMap { path =>
+            val name = root.relativize(path).toString.replace(java.io.File.separatorChar, '.')
+            if name.endsWith("$.class") then
+              Some(SuiteClass(name.stripSuffix("$.class"), isModule = true))
+            else if !name.contains("$") then
+              Some(SuiteClass(name.stripSuffix(".class"), isModule = false))
+            else None
+          }
           .toList
       finally stream.close()
 
@@ -122,9 +129,13 @@ final class MUnitTestRunner extends TestRunner[IO]:
     val throwable = event.throwable
     if throwable.isDefined then throwable.get.printStackTrace()
 
-  private def matches(fingerprint: Fingerprint, suite: Class[?]): Boolean = fingerprint match
+  private def matches(
+      fingerprint: Fingerprint,
+      suite: Class[?],
+      isModule: Boolean
+  ): Boolean = fingerprint match
     case value: SubclassFingerprint =>
-      if value.isModule() || value.superclassName() == null then false
+      if value.isModule() != isModule || value.superclassName() == null then false
       else
         try
           val parent = suite.getClassLoader.loadClass(value.superclassName())
@@ -163,8 +174,11 @@ private final case class FrameworkDefinition(factoryClass: String, framework: Fr
 private final case class RunnableSuite(
     definition: FrameworkDefinition,
     fingerprint: Fingerprint,
-    name: String
+    name: String,
+    isModule: Boolean
 )
+private final case class SuiteClass(name: String, isModule: Boolean):
+  def className: String = if isModule then name + "$" else name
 
 private object FrameworkDefinition:
   def available(loader: ClassLoader, classpath: List[Path]): List[FrameworkDefinition] =
@@ -188,7 +202,11 @@ private object FrameworkDefinition:
       .sortBy(_.getClass.getName)
       .map(framework => FrameworkDefinition(framework.getClass.getName, framework))
 
-  private val Known = List("munit.Framework", "org.scalatest.tools.Framework")
+  private val Known = List(
+    "munit.Framework",
+    "org.scalatest.tools.Framework",
+    "utest.runner.Framework"
+  )
 
   private def instantiate(loader: ClassLoader, name: String): Option[Framework] =
     try Some(loader.loadClass(name).getDeclaredConstructor().newInstance().asInstanceOf[Framework])

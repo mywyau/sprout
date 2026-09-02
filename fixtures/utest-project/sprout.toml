@@ -1,0 +1,6 @@
+[project]
+name = "utest-project"
+scala = "3.3.6"
+
+[test-dependencies]
+utest = "com.lihaoyi::utest:0.8.5"
