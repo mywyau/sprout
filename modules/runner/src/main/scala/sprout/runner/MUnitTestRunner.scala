@@ -25,7 +25,7 @@ final class MUnitTestRunner extends TestRunner[IO]:
       var failed = 0
       val capturedOutput = captureSuccessfulOutput(output) {
         val frameworks = FrameworkDefinition.available(loader, classpath)
-        val candidates = frameworks.flatMap { definition =>
+        val discovered = frameworks.flatMap { definition =>
           classDirectories.flatMap(classNames).distinct.sorted.flatMap { name =>
             val suite = loader.loadClass(name)
             definition.framework.fingerprints.toList.collect {
@@ -34,6 +34,11 @@ final class MUnitTestRunner extends TestRunner[IO]:
             }
           }
         }
+        val candidates = discovered
+          .groupBy(candidate => (candidate.definition.factoryClass, candidate.name))
+          .values
+          .map(_.head)
+          .toList
         val selected = selectSuites(candidates.map(_.name), selection).toSet
         val runnable = candidates.filter(candidate => selected.contains(candidate.name))
         if runnable.isEmpty then throw SproutError.User("No supported test suites found")
