@@ -35,9 +35,11 @@ final class MUnitTestRunner extends TestRunner[IO]:
           }
         }
         val candidates = discovered
-          .groupBy(candidate => (candidate.definition.factoryClass, candidate.name))
+          // A framework can expose multiple compatible fingerprints, and different discovery
+          // mechanisms can report equivalent framework implementations. A suite must run once.
+          .groupBy(_.name)
           .values
-          .map(_.head)
+          .map(_.minBy(_.definition.factoryClass))
           .toList
         val selected = selectSuites(candidates.map(_.name), selection).toSet
         val runnable = candidates.filter(candidate => selected.contains(candidate.name))
